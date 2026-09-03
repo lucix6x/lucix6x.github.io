@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel financeiro do casal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { margin: 0; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .font-serif { font-family: 'Source Serif 4', Georgia, serif; }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #D8D2C0; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// ============================================================
+// Design tokens (mantidos do painel original)
+// ============================================================
+const C = {
+  bg: '#F5F3ED', panel: '#FFFFFF', panelAlt: '#FAF9F4', border: '#E3DECF',
+  ink: '#1C2620', inkMuted: '#6B6F63', pine: '#1F4D3A', pineLight: '#E7EFE9',
+  gold: '#B8863E', goldLight: '#F3E8D3', alert: '#B3492E', alertLight: '#F7E4DE',
+  personA: '#1F4D3A', personB: '#3B5B74',
+};
+
+// ============================================================
+// Ícones (SVG leve, sem dependência externa)
+// ============================================================
+function Icon({ name, size = 16, style, className }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', style, className };
+  const paths = {
+    piechart: <><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M21 12A9 9 0 0 0 12 3v9z"/></>,
+    plus: <><path d="M12 5v14M5 12h14"/></>,
+    landmark: <><path d="M3 21h18M4 10h16M12 3l8 5H4l8-5zM6 10v9M10 10v9M14 10v9M18 10v9"/></>,
+    piggy: <><path d="M14 9V6a1 1 0 0 0-1-1h-1a3 3 0 0 0-3 3M4 12a5 5 0 0 1 5-5h6a3 3 0 0 1 3 3v1l2 1-2 1v1a3 3 0 0 1-3 3h-.5l.5 2h-3l-.4-2H9l-.4 2h-3l.6-3A5 5 0 0 1 4 12z"/><circle cx="8.5" cy="12" r=".6" fill="currentColor" stroke="none"/></>,
+    history: <><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 3"/></>,
+    home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></>,
+    utensils: <><path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11M17 3c-1.5 0-3 1.5-3 4v3h3M17 3v18"/></>,
+    car: <><path d="M4 16V11l2-5h12l2 5v5"/><rect x="3" y="16" width="18" height="4" rx="1"/><circle cx="7.5" cy="20" r="1.3"/><circle cx="16.5" cy="20" r="1.3"/></>,
+    heart: <><path d="M12 20s-7-4.4-9.5-8.8C.7 8 2 4.5 5.5 4 8 3.6 10 5 12 7c2-2 4-3.4 6.5-3 3.5.5 4.8 4 3 7.2C19 15.6 12 20 12 20z"/></>,
+    filetext: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4M9 12h6M9 16h6M9 8h2"/></>,
+    gamepad: <><rect x="2" y="7" width="20" height="10" rx="4"/><path d="M7 10v4M5 12h4M15.5 11.2h.01M18 13.2h.01"/></>,
+    grad: <><path d="M2 8l10-5 10 5-10 5-10-5z"/><path d="M6 10.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-5.5M22 8v6"/></>,
+    trending: <><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></>,
+    more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,
+    menu: <><path d="M3 6h18M3 12h18M3 18h18"/></>,
+    x: <><path d="M18 6 6 18M6 6l12 12"/></>,
+    alert: <><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></>,
+    chevron: <><path d="M9 6l6 6-6 6"/></>,
+    trash: <><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6h14z"/></>,
+    cloud: <><path d="M7 18a4 4 0 1 1 .7-7.9A5.5 5.5 0 0 1 18 12.5 3.5 3.5 0 0 1 17.5 19H7z"/></>,
+    check: <><path d="M20 6 9 17l-5-5"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9c.2.6.8 1 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.6 1z"/></>,
+    download: <><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
+    upload: <><path d="M12 21V9m0 0 4 4m-4-4-4 4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
+    link: <><path d="M9 12a4 4 0 0 0 5.7.3l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.6"/><path d="M15 12a4 4 0 0 0-5.7-.3l-3 3a4 4 0 0 0 5.7 5.7l1.6-1.6"/></>,
+  };
+  return <svg {...p}>{paths[name] || null}</svg>;
+}
+
+// ============================================================
+// Dados de domínio
+// ============================================================
+const CATEGORIES = [
+  { id: 'moradia', label: 'Moradia', icon: 'home', budgetType: 'necessidade', color: '#1F4D3A' },
+  { id: 'alimentacao', label: 'Alimentação', icon: 'utensils', budgetType: 'necessidade', color: '#B8863E' },
+  { id: 'transporte', label: 'Transporte', icon: 'car', budgetType: 'necessidade', color: '#3B5B74' },
+  { id: 'saude', label: 'Saúde', icon: 'heart', budgetType: 'necessidade', color: '#B3492E' },
+  { id: 'contas', label: 'Contas e dívidas', icon: 'filetext', budgetType: 'necessidade', color: '#6B6456' },
+  { id: 'lazer', label: 'Lazer', icon: 'gamepad', budgetType: 'desejo', color: '#7C6A9C' },
+  { id: 'educacao', label: 'Educação', icon: 'grad', budgetType: 'desejo', color: '#4E7A6B' },
+  { id: 'investimentos', label: 'Investimentos', icon: 'trending', budgetType: 'poupanca', color: '#2F7A54' },
+  { id: 'outros', label: 'Outros', icon: 'more', budgetType: 'desejo', color: '#9AA39A' },
+];
+const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+const BUDGET_TYPES = [
+  { id: 'necessidade', label: 'Necessidade' },
+  { id: 'desejo', label: 'Desejo' },
+  { id: 'poupanca', label: 'Poupança e investimento' },
+];
+const RECURRENCES = ['Único', 'Diário', 'Semanal', 'Mensal'];
+const GOAL_CATEGORIES = ['Reserva de emergência', 'Investimento', 'Compra planejada', 'Outro'];
+const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const NAV = [
+  { id: 'dashboard', label: 'Visão geral', icon: 'piechart' },
+  { id: 'add', label: 'Lançar gasto', icon: 'plus' },
+  { id: 'income', label: 'Renda', icon: 'landmark' },
+  { id: 'goals', label: 'Metas', icon: 'piggy' },
+  { id: 'history', label: 'Histórico', icon: 'history' },
+  { id: 'config', label: 'Sincronização', icon: 'cloud' },
+];
+const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule'];
+
+// ============================================================
+// Helpers
+// ============================================================
+const formatBRL = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+const monthKeyOf = (d) => (d ? d.slice(0, 7) : '');
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
+const monthLabel = (key) => { if (!key) return ''; const [y, m] = key.split('-').map(Number); return `${MONTHS_PT[m - 1]}/${String(y).slice(2)}`; };
+const last6MonthKeys = (endKey) => {
+  const [y, m] = endKey.split('-').map(Number);
+  const arr = [];
+  for (let i = 5; i >= 0; i--) { let mm = m - i, yy = y; while (mm <= 0) { mm += 12; yy -= 1; } arr.push(`${yy}-${String(mm).padStart(2, '0')}`); }
+  return arr;
+};
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const defaultIncome = { p1: { name: 'Pessoa 1', amount: 0 }, p2: { name: 'Pessoa 2', amount: 0 } };
+const defaultBudgetRule = { necessidade: 50, desejo: 30, poupanca: 20 };
+const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único' });
+const emptyGoalForm = () => ({ name: '', target: '', current: '', deadline: '', category: 'Reserva de emergência' });
+
+// ============================================================
+// Armazenamento local (sempre ativo — funciona offline)
+// ============================================================
+const LOCAL_PREFIX = 'pfc:';
+const LocalStore = {
+  get(key) { try { const v = localStorage.getItem(LOCAL_PREFIX + key); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
+  set(key, val) { try { localStorage.setItem(LOCAL_PREFIX + key, JSON.stringify(val)); return true; } catch (e) { return false; } },
+};
+
+// ============================================================
+// Sincronização opcional com Google Sheets (REST direto, sem backend)
+// ============================================================
+const GSHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+
+function useGoogleSheetsSync() {
+  const [clientId, setClientId] = useState(LocalStore.get('gs_client_id') || '');
+  const [spreadsheetId, setSpreadsheetId] = useState(LocalStore.get('gs_spreadsheet_id') || '');
+  const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState('idle'); // idle | connecting | ready | error
+  const [errorMsg, setErrorMsg] = useState('');
+  const tokenRef = useRef(null); // { access_token, expires_at }
+  const tokenClientRef = useRef(null);
+
+  const gisReady = () => typeof window.google !== 'undefined' && window.google.accounts && window.google.accounts.oauth2;
+
+  const ensureTokenClient = useCallback(() => {
+    if (!gisReady() || !clientId) return null;
+    if (!tokenClientRef.current) {
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: () => {}, // sobrescrito por chamada
+      });
+    }
+    return tokenClientRef.current;
+  }, [clientId]);
+
+  const getToken = useCallback((interactive) => {
+    return new Promise((resolve, reject) => {
+      if (!gisReady()) return reject(new Error('Google Identity Services ainda não carregou. Aguarde alguns segundos e tente de novo.'));
+      if (!clientId) return reject(new Error('Cole o Client ID do Google Cloud antes de conectar.'));
+      const now = Date.now();
+      if (tokenRef.current && tokenRef.current.expires_at > now + 30000) {
+        return resolve(tokenRef.current.access_token);
+      }
+      const tc = ensureTokenClient();
+      if (!tc) return reject(new Error('Não foi possível iniciar o cliente OAuth.'));
+      tc.callback = (resp) => {
+        if (resp.error) return reject(new Error('Falha na autorização: ' + resp.error));
+        tokenRef.current = { access_token: resp.access_token, expires_at: Date.now() + (resp.expires_in || 3500) * 1000 };
+        resolve(resp.access_token);
+      };
+      tc.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+    });
+  }, [clientId, ensureTokenClient]);
+
+  const api = useCallback(async (path, options = {}, interactive = false) => {
+    const token = await getToken(interactive);
+    const res = await fetch(`${GSHEETS_API}${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Erro na API do Google Sheets (${res.status}): ${text.slice(0, 200)}`);
+    }
+    return res.json();
+  }, [getToken]);
+
+  const createSpreadsheet = useCallback(async () => {
+    const body = {
+      properties: { title: 'Painel financeiro do casal — dados' },
+      sheets: SYNC_KEYS.map((k) => ({ properties: { title: k } })),
+    };
+    const data = await api('', { method: 'POST', body: JSON.stringify(body) }, true);
+    setSpreadsheetId(data.spreadsheetId);
+    LocalStore.set('gs_spreadsheet_id', data.spreadsheetId);
+    return data.spreadsheetId;
+  }, [api]);
+
+  const connect = useCallback(async () => {
+    setStatus('connecting'); setErrorMsg('');
+    try {
+      await getToken(true);
+      let id = spreadsheetId;
+      if (!id) id = await createSpreadsheet();
+      else {
+        // valida se a planilha ainda existe / é acessível
+        try { await api(`/${id}?fields=spreadsheetId`, {}, false); }
+        catch (e) { id = await createSpreadsheet(); }
+      }
+      setConnected(true);
+      setStatus('ready');
+      LocalStore.set('gs_client_id', clientId);
+      return id;
+    } catch (e) {
+      setStatus('error'); setErrorMsg(e.message || String(e)); setConnected(false);
+      throw e;
+    }
+  }, [getToken, spreadsheetId, createSpreadsheet, api, clientId]);
+
+  const disconnect = useCallback(() => {
+    setConnected(false); setStatus('idle'); tokenRef.current = null;
+  }, []);
+
+  const pushKey = useCallback(async (key, value) => {
+    if (!connected || !spreadsheetId) return;
+    const range = `${key}!A1`;
+    await api(`/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
+      method: 'PUT',
+      body: JSON.stringify({ range, majorDimension: 'ROWS', values: [[JSON.stringify(value)]] }),
+    }, false);
+  }, [connected, spreadsheetId, api]);
+
+  const pullAll = useCallback(async () => {
+    if (!spreadsheetId) return null;
+    const ranges = SYNC_KEYS.map((k) => `ranges=${encodeURIComponent(k + '!A1')}`).join('&');
+    const data = await api(`/${spreadsheetId}/values:batchGet?${ranges}`, {}, false);
+    const out = {};
+    (data.valueRanges || []).forEach((vr, i) => {
+      const key = SYNC_KEYS[i];
+      const raw = vr.values && vr.values[0] && vr.values[0][0];
+      if (raw) { try { out[key] = JSON.parse(raw); } catch (e) {} }
+    });
+    return out;
+  }, [spreadsheetId, api]);
+
+  // tenta reconectar silenciosamente se já havia sido conectado antes
+  useEffect(() => {
+    if (clientId && spreadsheetId) {
+      const t = setInterval(() => { if (gisReady()) { clearInterval(t); } }, 300);
+      setTimeout(() => clearInterval(t), 6000);
+    }
+  }, [clientId, spreadsheetId]);
+
+  return { clientId, setClientId, spreadsheetId, connected, status, errorMsg, connect, disconnect, pushKey, pullAll };
+}
+
+// ============================================================
+// Pequenos átomos de UI
+// ============================================================
+function StatCard({ label, value, sub, accent }) {
+  return (
+    <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+      <span className="text-sm" style={{ color: C.inkMuted }}>{label}</span>
+      <span className="text-2xl font-serif font-semibold tabular-nums" style={{ color: accent || C.ink }}>{value}</span>
+      {sub ? <span className="text-xs" style={{ color: C.inkMuted }}>{sub}</span> : null}
+    </div>
+  );
+}
+function FieldLabel({ children }) { return <label className="text-sm mb-1 block" style={{ color: C.inkMuted }}>{children}</label>; }
+function TextInput(props) {
+  return <input {...props} className={`w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors ${props.className || ''}`}
+    style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink, ...(props.style || {}) }} />;
+}
+function Select(props) {
+  return <select {...props} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink }}>{props.children}</select>;
+}
+function PrimaryButton({ children, onClick, disabled }) {
+  return <button onClick={onClick} disabled={disabled} className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50" style={{ background: C.pine, color: '#fff' }}>{children}</button>;
+}
+function SecondaryButton({ children, onClick, disabled }) {
+  return <button onClick={onClick} disabled={disabled} className="rounded-lg px-4 py-2 text-sm font-medium transition-opacity disabled:opacity-50" style={{ background: C.panel, color: C.ink, border: `1px solid ${C.border}` }}>{children}</button>;
+}
+function Toast({ message }) {
+  if (!message) return null;
+  return <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg z-50" style={{ background: C.pine, color: '#fff' }}>{message}</div>;
+}
+
+// ============================================================
+// Gráficos leves em SVG puro (sem dependência de biblioteca)
+// ============================================================
+function DonutChart({ data, size = 180, thickness = 26 }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const r = (size - thickness) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  const gap = total > 0 ? circumference * 0.006 : 0;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.panelAlt} strokeWidth={thickness} />
+      {data.map((d) => {
+        const frac = total > 0 ? d.value / total : 0;
+        const len = Math.max(0, frac * circumference - gap);
+        const el = (
+          <circle key={d.id} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth={thickness}
+            strokeDasharray={`${len} ${circumference - len}`} strokeDashoffset={-offset}
+            transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="butt">
+            <title>{`${d.name}: ${formatBRL(d.value)}`}</title>
+          </circle>
+        );
+        offset += frac * circumference;
+        return el;
+      })}
+    </svg>
+  );
+}
+
+function TrendChart({ data, referenceValue, width = 560, height = 220 }) {
+  const padL = 54, padR = 14, padT = 16, padB = 26;
+  const innerW = width - padL - padR, innerH = height - padT - padB;
+  const allVals = data.flatMap((d) => [d.gastos, d.poupanca]).concat(referenceValue ? [referenceValue] : []);
+  const maxVal = Math.max(1, ...allVals) * 1.15;
+  const x = (i) => padL + (data.length > 1 ? (i / (data.length - 1)) * innerW : innerW / 2);
+  const y = (v) => padT + innerH - (v / maxVal) * innerH;
+  const pathOf = (key) => data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(d[key])}`).join(' ');
+  const ticks = 4;
+  return (
+    <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+      {Array.from({ length: ticks + 1 }).map((_, i) => {
+        const v = (maxVal / ticks) * i;
+        const yy = y(v);
+        return (
+          <g key={i}>
+            <line x1={padL} x2={width - padR} y1={yy} y2={yy} stroke={C.border} strokeDasharray="3 3" />
+            <text x={padL - 8} y={yy + 3} fontSize="10" fill={C.inkMuted} textAnchor="end">{`R$${Math.round(v / 1000)}k`}</text>
+          </g>
+        );
+      })}
+      {referenceValue > 0 && (
+        <g>
+          <line x1={padL} x2={width - padR} y1={y(referenceValue)} y2={y(referenceValue)} stroke={C.gold} strokeDasharray="4 4" />
+          <text x={width - padR} y={y(referenceValue) - 4} fontSize="10" fill={C.gold} textAnchor="end">Renda atual</text>
+        </g>
+      )}
+      <path d={pathOf('gastos')} fill="none" stroke={C.alert} strokeWidth="2" />
+      <path d={pathOf('poupanca')} fill="none" stroke={C.pine} strokeWidth="2" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(d.gastos)} r="3" fill={C.alert}><title>{`${d.month} · Gastos: ${formatBRL(d.gastos)}`}</title></circle>
+          <circle cx={x(i)} cy={y(d.poupanca)} r="3" fill={C.pine}><title>{`${d.month} · Poupança: ${formatBRL(d.poupanca)}`}</title></circle>
+          <text x={x(i)} y={height - 6} fontSize="11" fill={C.inkMuted} textAnchor="middle">{d.month}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// ============================================================
+// App principal
+// ============================================================
+function FinanceDashboard() {
+  const [income, setIncome] = useState(() => LocalStore.get('income') || defaultIncome);
+  const [entries, setEntries] = useState(() => LocalStore.get('entries') || []);
+  const [goals, setGoals] = useState(() => LocalStore.get('goals') || []);
+  const [budgetRule, setBudgetRule] = useState(() => LocalStore.get('budgetRule') || defaultBudgetRule);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [toast, setToast] = useState('');
+  const [resetArmed, setResetArmed] = useState(false);
+
+  const [entryForm, setEntryForm] = useState(emptyEntryForm());
+  const [entryError, setEntryError] = useState('');
+  const [goalForm, setGoalForm] = useState(emptyGoalForm());
+  const [goalError, setGoalError] = useState('');
+  const [contribDrafts, setContribDrafts] = useState({});
+  const [historyFilter, setHistoryFilter] = useState({ person: 'todos', category: 'todas' });
+  const [showAllMonths, setShowAllMonths] = useState(false);
+
+  const sync = useGoogleSheetsSync();
+  const [syncingNow, setSyncingNow] = useState(false);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
+
+  // ---- Persistência: sempre local; envia para o Sheets se conectado ----
+  const persist = useCallback((key, value) => {
+    LocalStore.set(key, value);
+    if (sync.connected) {
+      sync.pushKey(key, value).catch((e) => showToast('Não sincronizou com o Sheets: ' + e.message));
+    }
+  }, [sync]);
+
+  const pullFromSheets = useCallback(async () => {
+    setSyncingNow(true);
+    try {
+      const data = await sync.pullAll();
+      if (data) {
+        if (data.income) { setIncome(data.income); LocalStore.set('income', data.income); }
+        if (data.entries) { setEntries(data.entries); LocalStore.set('entries', data.entries); }
+        if (data.goals) { setGoals(data.goals); LocalStore.set('goals', data.goals); }
+        if (data.budgetRule) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
+        showToast('Dados atualizados a partir do Google Sheets');
+      }
+    } catch (e) {
+      showToast('Falha ao buscar dados do Sheets: ' + e.message);
+    } finally {
+      setSyncingNow(false);
+    }
+  }, [sync]);
+
+  const handleConnectSheets = async () => {
+    try {
+      await sync.connect();
+      showToast('Conectado ao Google Sheets');
+      await pullFromSheets();
+      // envia o estado atual como primeira sincronização, caso a planilha esteja vazia
+      SYNC_KEYS.forEach((k) => {
+        const val = { income, entries, goals, budgetRule }[k];
+        sync.pushKey(k, val).catch(() => {});
+      });
+    } catch (e) {
+      showToast('Não foi possível conectar: ' + e.message);
+    }
+  };
+
+  // ---- Derivados ----
+  const personNames = useMemo(() => ['Casal', income.p1.name || 'Pessoa 1', income.p2.name || 'Pessoa 2'], [income]);
+  const monthEntries = useMemo(() => entries.filter((e) => monthKeyOf(e.date) === selectedMonth), [entries, selectedMonth]);
+  const totalIncome = Number(income.p1.amount || 0) + Number(income.p2.amount || 0);
+  const totalsByType = useMemo(() => {
+    const t = { necessidade: 0, desejo: 0, poupanca: 0 };
+    monthEntries.forEach((e) => { t[e.budgetType] = (t[e.budgetType] || 0) + Number(e.amount || 0); });
+    return t;
+  }, [monthEntries]);
+  const totalOut = totalsByType.necessidade + totalsByType.desejo + totalsByType.poupanca;
+  const balance = totalIncome - totalOut;
+  const savingsRate = totalIncome > 0 ? (totalsByType.poupanca / totalIncome) * 100 : 0;
+  const totalsByCategory = useMemo(() => {
+    const map = {};
+    monthEntries.forEach((e) => { map[e.category] = (map[e.category] || 0) + Number(e.amount || 0); });
+    return CATEGORIES.map((c) => ({ id: c.id, name: c.label, value: map[c.id] || 0, color: c.color })).filter((c) => c.value > 0);
+  }, [monthEntries]);
+  const totalCategorySum = totalsByCategory.reduce((s, c) => s + c.value, 0);
+  const totalsByPerson = useMemo(() => {
+    const map = {};
+    monthEntries.forEach((e) => { map[e.person] = (map[e.person] || 0) + Number(e.amount || 0); });
+    return map;
+  }, [monthEntries]);
+  const trendData = useMemo(() => {
+    const keys = last6MonthKeys(selectedMonth);
+    return keys.map((k) => {
+      const monEntries = entries.filter((e) => monthKeyOf(e.date) === k);
+      const gastos = monEntries.filter((e) => e.budgetType !== 'poupanca').reduce((s, e) => s + Number(e.amount || 0), 0);
+      const poupanca = monEntries.filter((e) => e.budgetType === 'poupanca').reduce((s, e) => s + Number(e.amount || 0), 0);
+      return { month: monthLabel(k), gastos, poupanca };
+    });
+  }, [entries, selectedMonth]);
+
+  // ---- Handlers: lançamentos ----
+  const handleAddEntry = () => {
+    setEntryError('');
+    const amount = parseFloat(entryForm.amount);
+    if (!entryForm.description.trim()) return setEntryError('Descreva o gasto.');
+    if (!entryForm.date) return setEntryError('Escolha uma data.');
+    if (!amount || amount <= 0) return setEntryError('Informe um valor maior que zero.');
+    const newEntry = { id: uid(), ...entryForm, amount };
+    const updated = [...entries, newEntry];
+    setEntries(updated); persist('entries', updated);
+    setEntryForm({ ...emptyEntryForm(), person: entryForm.person });
+    showToast('Lançamento salvo');
+  };
+  const handleDeleteEntry = (id) => { const updated = entries.filter((e) => e.id !== id); setEntries(updated); persist('entries', updated); };
+
+  // ---- Handlers: renda e regra ----
+  const handleSaveIncome = () => {
+    const cleaned = { p1: { name: income.p1.name || 'Pessoa 1', amount: Number(income.p1.amount) || 0 }, p2: { name: income.p2.name || 'Pessoa 2', amount: Number(income.p2.amount) || 0 } };
+    setIncome(cleaned); persist('income', cleaned); showToast('Renda atualizada');
+  };
+  const handleSaveBudgetRule = () => {
+    const sum = Number(budgetRule.necessidade) + Number(budgetRule.desejo) + Number(budgetRule.poupanca);
+    if (sum !== 100) { showToast('As porcentagens devem somar 100%'); return; }
+    persist('budgetRule', budgetRule); showToast('Meta de orçamento salva');
+  };
+
+  // ---- Handlers: metas ----
+  const handleAddGoal = () => {
+    setGoalError('');
+    const target = parseFloat(goalForm.target);
+    if (!goalForm.name.trim()) return setGoalError('Dê um nome à meta.');
+    if (!target || target <= 0) return setGoalError('Informe um valor alvo maior que zero.');
+    const current = parseFloat(goalForm.current) || 0;
+    const newGoal = { id: uid(), ...goalForm, target, current };
+    const updated = [...goals, newGoal];
+    setGoals(updated); persist('goals', updated);
+    setGoalForm(emptyGoalForm()); showToast('Meta criada');
+  };
+  const handleDeleteGoal = (id) => { const updated = goals.filter((g) => g.id !== id); setGoals(updated); persist('goals', updated); };
+  const handleContribute = (id) => {
+    const raw = contribDrafts[id]; const amount = parseFloat(raw);
+    if (!amount || amount <= 0) return;
+    const updated = goals.map((g) => (g.id === id ? { ...g, current: Number(g.current) + amount } : g));
+    setGoals(updated); persist('goals', updated);
+    setContribDrafts((prev) => ({ ...prev, [id]: '' })); showToast('Contribuição adicionada');
+  };
+
+  const handleResetData = () => {
+    if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000); return; }
+    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule);
+    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule);
+    setResetArmed(false); showToast('Dados redefinidos');
+  };
+
+  // ---- Backup local (JSON e CSV) ----
+  const downloadFile = (filename, content, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+  const handleExportJSON = () => {
+    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule }, null, 2), 'application/json');
+    showToast('Backup .json baixado');
+  };
+  const handleExportCSV = () => {
+    const header = ['data', 'descricao', 'categoria', 'valor', 'pessoa', 'tipo', 'recorrencia'];
+    const rows = entries.map((e) => [e.date, e.description, catById(e.category).label, e.amount, e.person, e.budgetType, e.recurrence]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile('lancamentos.csv', '\ufeff' + csv, 'text/csv;charset=utf-8');
+    showToast('Planilha .csv baixada — pode abrir no Google Sheets ou Excel');
+  };
+  const handleImportJSON = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.income) { setIncome(data.income); persist('income', data.income); }
+        if (data.entries) { setEntries(data.entries); persist('entries', data.entries); }
+        if (data.goals) { setGoals(data.goals); persist('goals', data.goals); }
+        if (data.budgetRule) { setBudgetRule(data.budgetRule); persist('budgetRule', data.budgetRule); }
+        showToast('Backup importado com sucesso');
+      } catch (e) { showToast('Arquivo inválido'); }
+    };
+    reader.readAsText(file);
+  };
+
+  // ---- Histórico filtrado ----
+  const historyEntries = useMemo(() => {
+    let list = showAllMonths ? entries : monthEntries;
+    if (historyFilter.person !== 'todos') list = list.filter((e) => e.person === historyFilter.person);
+    if (historyFilter.category !== 'todas') list = list.filter((e) => e.category === historyFilter.category);
+    return [...list].sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [entries, monthEntries, showAllMonths, historyFilter]);
+
+  return (
+    <div className="min-h-screen w-full font-sans" style={{ background: C.bg, color: C.ink }}>
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-serif font-semibold" style={{ color: C.ink }}>Painel financeiro do casal</h1>
+            <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Renda, gastos, metas e investimentos em um só lugar.</p>
+          </div>
+          <button className="md:hidden rounded-lg p-2" style={{ background: C.panel, border: `1px solid ${C.border}` }} onClick={() => setMobileNavOpen((v) => !v)}>
+            <Icon name={mobileNavOpen ? 'x' : 'menu'} size={18} />
+          </button>
+        </div>
+
+        {/* Nav */}
+        <div className={`${mobileNavOpen ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 mb-6`}>
+          {NAV.map((n) => {
+            const active = activeTab === n.id;
+            return (
+              <button key={n.id} onClick={() => { setActiveTab(n.id); setMobileNavOpen(false); }}
+                className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors"
+                style={{ background: active ? C.pine : C.panel, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? C.pine : C.border}` }}>
+                <Icon name={n.icon} size={16} />{n.label}
+                {n.id === 'config' && sync.connected && <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.gold }} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ---------------- DASHBOARD ---------------- */}
+        {activeTab === 'dashboard' && (
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-serif font-semibold">Resumo do mês</h2>
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
+                className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} />
+            </div>
+
+            <div className="rounded-xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4" style={{ background: C.pineLight, border: `1px solid ${C.border}` }}>
+              <div>
+                <span className="text-sm" style={{ color: C.inkMuted }}>Saldo não alocado do mês</span>
+                <div className="text-4xl md:text-5xl font-serif font-semibold tabular-nums mt-1" style={{ color: balance < 0 ? C.alert : C.pine }}>{formatBRL(balance)}</div>
+                <span className="text-xs" style={{ color: C.inkMuted }}>Renda − gastos − poupança do mês. Perto de zero é bom: significa que a renda foi toda planejada.</span>
+              </div>
+              <div className="text-left md:text-right">
+                <span className="text-sm" style={{ color: C.inkMuted }}>Taxa de poupança</span>
+                <div className="text-3xl font-serif font-semibold tabular-nums" style={{ color: C.gold }}>{savingsRate.toFixed(1)}%</div>
+                <span className="text-xs" style={{ color: C.inkMuted }}>Meta: {budgetRule.poupanca}% da renda</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard label="Renda conjunta" value={formatBRL(totalIncome)} sub={`${income.p1.name}: ${formatBRL(income.p1.amount)} · ${income.p2.name}: ${formatBRL(income.p2.amount)}`} />
+              <StatCard label="Gastos (necessidade + desejo)" value={formatBRL(totalsByType.necessidade + totalsByType.desejo)} sub={`Necessidade: ${formatBRL(totalsByType.necessidade)} · Desejo: ${formatBRL(totalsByType.desejo)}`} accent={C.alert} />
+              <StatCard label="Poupança e investimento" value={formatBRL(totalsByType.poupanca)} sub="Dinheiro que ficou com vocês" accent={C.pine} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Regra de orçamento ({budgetRule.necessidade}/{budgetRule.desejo}/{budgetRule.poupanca})</h3>
+                <div className="flex flex-col gap-4">
+                  {BUDGET_TYPES.map((bt) => {
+                    const actual = totalIncome > 0 ? (totalsByType[bt.id] / totalIncome) * 100 : 0;
+                    const target = budgetRule[bt.id]; const over = actual > target + 2;
+                    return (
+                      <div key={bt.id}>
+                        <div className="flex justify-between text-xs mb-1" style={{ color: C.inkMuted }}>
+                          <span>{bt.label}</span><span className="tabular-nums">{actual.toFixed(0)}% de {target}% · {formatBRL(totalsByType[bt.id])}</span>
+                        </div>
+                        <div className="h-2.5 rounded-full relative" style={{ background: C.panelAlt }}>
+                          <div className="h-2.5 rounded-full" style={{ width: `${Math.min(100, actual)}%`, background: over ? C.alert : C.pine }} />
+                          <div className="absolute top-0 h-2.5 border-r-2" style={{ left: `${Math.min(100, target)}%`, borderColor: C.gold }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <h3 className="text-sm font-medium mb-2" style={{ color: C.ink }}>Gastos por categoria</h3>
+                {totalsByCategory.length === 0 ? (
+                  <p className="text-sm py-10 text-center" style={{ color: C.inkMuted }}>Nenhum gasto lançado neste mês ainda.</p>
+                ) : (
+                  <div className="flex flex-col md:flex-row items-center gap-4">
+                    <div className="relative shrink-0" style={{ width: 180, height: 180 }}>
+                      <DonutChart data={totalsByCategory} size={180} />
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px]" style={{ color: C.inkMuted }}>Total</span>
+                        <span className="text-sm font-serif font-semibold" style={{ color: C.ink }}>{formatBRL(totalCategorySum)}</span>
+                      </div>
+                    </div>
+                    <div className="flex-1 w-full flex flex-col gap-1.5">
+                      {totalsByCategory.sort((a, b) => b.value - a.value).map((c) => (
+                        <div key={c.id} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-2" style={{ color: C.ink }}><span className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.name}</span>
+                          <span className="tabular-nums" style={{ color: C.inkMuted }}>{formatBRL(c.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {personNames.slice(1).some((n) => totalsByPerson[n]) && (
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Gastos por pessoa neste mês</h3>
+                <div className="flex flex-col gap-3">
+                  {[{ name: income.p1.name, color: C.personA }, { name: income.p2.name, color: C.personB }, { name: 'Casal', color: C.gold }].map((p) => {
+                    const val = totalsByPerson[p.name] || 0;
+                    const pct = totalCategorySum > 0 ? (val / totalCategorySum) * 100 : 0;
+                    return (
+                      <div key={p.name}>
+                        <div className="flex justify-between text-xs mb-1" style={{ color: C.inkMuted }}><span>{p.name}</span><span className="tabular-nums">{formatBRL(val)}</span></div>
+                        <div className="h-2 rounded-full" style={{ background: C.panelAlt }}><div className="h-2 rounded-full" style={{ width: `${pct}%`, background: p.color }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Evolução — últimos 6 meses</h3>
+              <div style={{ width: '100%' }}><TrendChart data={trendData} referenceValue={totalIncome} /></div>
+              <div className="flex gap-4 mt-2 text-xs" style={{ color: C.inkMuted }}>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5" style={{ background: C.alert }} />Gastos</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5" style={{ background: C.pine }} />Poupança</span>
+              </div>
+            </div>
+
+            {goals.length > 0 && (
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium" style={{ color: C.ink }}>Metas em andamento</h3>
+                  <button onClick={() => setActiveTab('goals')} className="text-xs flex items-center gap-1" style={{ color: C.pine }}>Ver todas <Icon name="chevron" size={14} /></button>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {goals.slice(0, 3).map((g) => {
+                    const pct = g.target > 0 ? Math.min(100, (g.current / g.target) * 100) : 0;
+                    return (
+                      <div key={g.id}>
+                        <div className="flex justify-between text-xs mb-1" style={{ color: C.inkMuted }}><span>{g.name}</span><span className="tabular-nums">{formatBRL(g.current)} / {formatBRL(g.target)}</span></div>
+                        <div className="h-2 rounded-full" style={{ background: C.panelAlt }}><div className="h-2 rounded-full" style={{ width: `${pct}%`, background: C.gold }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---------------- ADD ENTRY ---------------- */}
+        {activeTab === 'add' && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h2 className="text-lg font-serif font-semibold mb-4">Lançar gasto</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={entryForm.date} onChange={(e) => setEntryForm({ ...entryForm, date: e.target.value })} /></div>
+                <div><FieldLabel>Recorrência</FieldLabel><Select value={entryForm.recurrence} onChange={(e) => setEntryForm({ ...entryForm, recurrence: e.target.value })}>{RECURRENCES.map((r) => <option key={r} value={r}>{r}</option>)}</Select></div>
+                <div className="sm:col-span-2"><FieldLabel>Descrição</FieldLabel><TextInput type="text" placeholder="Ex.: Mercado do mês, aluguel, cinema…" value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} /></div>
+                <div><FieldLabel>Categoria</FieldLabel><Select value={entryForm.category} onChange={(e) => { const cat = catById(e.target.value); setEntryForm({ ...entryForm, category: cat.id, budgetType: cat.budgetType }); }}>{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</Select></div>
+                <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" placeholder="0,00" value={entryForm.amount} onChange={(e) => setEntryForm({ ...entryForm, amount: e.target.value })} /></div>
+                <div><FieldLabel>Quem</FieldLabel><Select value={entryForm.person} onChange={(e) => setEntryForm({ ...entryForm, person: e.target.value })}>{personNames.map((p) => <option key={p} value={p}>{p}</option>)}</Select></div>
+                <div><FieldLabel>Tipo</FieldLabel><Select value={entryForm.budgetType} onChange={(e) => setEntryForm({ ...entryForm, budgetType: e.target.value })}>{BUDGET_TYPES.map((bt) => <option key={bt.id} value={bt.id}>{bt.label}</option>)}</Select></div>
+              </div>
+              {entryError && <p className="text-sm mt-3" style={{ color: C.alert }}>{entryError}</p>}
+              <div className="mt-5"><PrimaryButton onClick={handleAddEntry}>Salvar lançamento</PrimaryButton></div>
+            </div>
+            <div className="lg:col-span-2 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Lançamentos recentes</h3>
+              {entries.length === 0 ? <p className="text-sm" style={{ color: C.inkMuted }}>Nenhum lançamento ainda.</p> : (
+                <div className="flex flex-col gap-3">
+                  {[...entries].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 6).map((e) => {
+                    const cat = catById(e.category);
+                    return (
+                      <div key={e.id} className="flex items-center gap-3">
+                        <div className="rounded-full p-2" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p><p className="text-xs" style={{ color: C.inkMuted }}>{e.date} · {e.person}</p></div>
+                        <span className="text-sm tabular-nums" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- INCOME ---------------- */}
+        {activeTab === 'income' && (
+          <div className="flex flex-col gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[{ key: 'p1', color: C.personA }, { key: 'p2', color: C.personB }].map(({ key, color }) => (
+                <div key={key} className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${color}` }}>
+                  <FieldLabel>Nome</FieldLabel>
+                  <TextInput type="text" value={income[key].name} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], name: e.target.value } })} />
+                  <div className="mt-3"><FieldLabel>Renda mensal líquida (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" value={income[key].amount} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], amount: e.target.value } })} /></div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3" style={{ background: C.pineLight, border: `1px solid ${C.border}` }}>
+              <div><span className="text-sm" style={{ color: C.inkMuted }}>Renda conjunta mensal</span><div className="text-2xl font-serif font-semibold tabular-nums" style={{ color: C.pine }}>{formatBRL(Number(income.p1.amount || 0) + Number(income.p2.amount || 0))}</div></div>
+              <PrimaryButton onClick={handleSaveIncome}>Salvar renda</PrimaryButton>
+            </div>
+            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: C.ink }}>Como dividir a renda</h3>
+              <p className="text-xs mb-4" style={{ color: C.inkMuted }}>Ajuste as três fatias — precisam somar 100%. Padrão recomendado: 50% necessidades, 30% desejos, 20% poupança e investimento.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {BUDGET_TYPES.map((bt) => <div key={bt.id}><FieldLabel>{bt.label} (%)</FieldLabel><TextInput type="number" min="0" max="100" value={budgetRule[bt.id]} onChange={(e) => setBudgetRule({ ...budgetRule, [bt.id]: Number(e.target.value) })} /></div>)}
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <PrimaryButton onClick={handleSaveBudgetRule}>Salvar meta de orçamento</PrimaryButton>
+                <span className="text-xs" style={{ color: C.inkMuted }}>Soma atual: {Number(budgetRule.necessidade) + Number(budgetRule.desejo) + Number(budgetRule.poupanca)}%</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- GOALS ---------------- */}
+        {activeTab === 'goals' && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-2 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h2 className="text-lg font-serif font-semibold mb-4">Nova meta</h2>
+              <FieldLabel>Nome</FieldLabel>
+              <TextInput type="text" placeholder="Ex.: Reserva de emergência" value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} />
+              <div className="mt-3"><FieldLabel>Categoria</FieldLabel><Select value={goalForm.category} onChange={(e) => setGoalForm({ ...goalForm, category: e.target.value })}>{GOAL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select></div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div><FieldLabel>Valor alvo (R$)</FieldLabel><TextInput type="number" min="0" step="0.01" value={goalForm.target} onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })} /></div>
+                <div><FieldLabel>Já poupado (R$)</FieldLabel><TextInput type="number" min="0" step="0.01" value={goalForm.current} onChange={(e) => setGoalForm({ ...goalForm, current: e.target.value })} /></div>
+              </div>
+              <div className="mt-3"><FieldLabel>Prazo</FieldLabel><TextInput type="month" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} /></div>
+              {goalError && <p className="text-sm mt-3" style={{ color: C.alert }}>{goalError}</p>}
+              <div className="mt-5"><PrimaryButton onClick={handleAddGoal}>Criar meta</PrimaryButton></div>
+            </div>
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              {goals.length === 0 ? (
+                <div className="rounded-xl p-6 text-center" style={{ background: C.panel, border: `1px solid ${C.border}` }}><p className="text-sm" style={{ color: C.inkMuted }}>Nenhuma meta ainda. Comece pela reserva de emergência — o ideal é 6 meses de despesas essenciais.</p></div>
+              ) : (
+                goals.map((g) => {
+                  const pct = g.target > 0 ? Math.min(100, (g.current / g.target) * 100) : 0;
+                  const now = new Date();
+                  let monthsLeft = null;
+                  if (g.deadline) { const [y, m] = g.deadline.split('-').map(Number); monthsLeft = (y - now.getFullYear()) * 12 + (m - (now.getMonth() + 1)); }
+                  const remaining = Math.max(0, g.target - g.current);
+                  const perMonth = monthsLeft && monthsLeft > 0 ? remaining / monthsLeft : null;
+                  return (
+                    <div key={g.id} className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div><h3 className="text-sm font-medium" style={{ color: C.ink }}>{g.name}</h3><span className="text-xs" style={{ color: C.inkMuted }}>{g.category}</span></div>
+                        <button onClick={() => handleDeleteGoal(g.id)}><Icon name="trash" size={16} style={{ color: C.inkMuted }} /></button>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs mb-1" style={{ color: C.inkMuted }}><span>{formatBRL(g.current)} de {formatBRL(g.target)}</span><span>{pct.toFixed(0)}%</span></div>
+                        <div className="h-2.5 rounded-full" style={{ background: C.panelAlt }}><div className="h-2.5 rounded-full" style={{ width: `${pct}%`, background: C.gold }} /></div>
+                      </div>
+                      {perMonth !== null && remaining > 0 && <p className="text-xs mt-2" style={{ color: C.inkMuted }}>Faltam {formatBRL(remaining)} em {monthsLeft} {monthsLeft === 1 ? 'mês' : 'meses'} · aproximadamente {formatBRL(perMonth)}/mês</p>}
+                      <div className="flex items-center gap-2 mt-3">
+                        <TextInput type="number" min="0" step="0.01" placeholder="Adicionar valor" value={contribDrafts[g.id] || ''} onChange={(e) => setContribDrafts((prev) => ({ ...prev, [g.id]: e.target.value }))} className="max-w-[140px]" />
+                        <PrimaryButton onClick={() => handleContribute(g.id)}>Adicionar</PrimaryButton>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- HISTORY ---------------- */}
+        {activeTab === 'history' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-serif font-semibold mr-auto">Histórico de lançamentos</h2>
+              <button onClick={() => setShowAllMonths((v) => !v)} className="text-xs rounded-full px-3 py-1.5" style={{ background: showAllMonths ? C.pine : C.panel, color: showAllMonths ? '#fff' : C.inkMuted, border: `1px solid ${showAllMonths ? C.pine : C.border}` }}>{showAllMonths ? 'Todos os meses' : monthLabel(selectedMonth)}</button>
+              <Select value={historyFilter.person} onChange={(e) => setHistoryFilter({ ...historyFilter, person: e.target.value })} className="w-auto"><option value="todos">Todas as pessoas</option>{personNames.map((p) => <option key={p} value={p}>{p}</option>)}</Select>
+              <Select value={historyFilter.category} onChange={(e) => setHistoryFilter({ ...historyFilter, category: e.target.value })} className="w-auto"><option value="todas">Todas as categorias</option>{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</Select>
+              <SecondaryButton onClick={handleExportCSV}><span className="flex items-center gap-1.5"><Icon name="download" size={14} />Exportar CSV</span></SecondaryButton>
+            </div>
+            <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              {historyEntries.length === 0 ? <p className="text-sm p-6 text-center" style={{ color: C.inkMuted }}>Nenhum lançamento encontrado com esses filtros.</p> : (
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {historyEntries.map((e) => {
+                    const cat = catById(e.category);
+                    return (
+                      <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                        <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p><p className="text-xs" style={{ color: C.inkMuted }}>{e.date} · {e.person} · {cat.label} · {e.recurrence}</p></div>
+                        <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- CONFIG / SYNC ---------------- */}
+        {activeTab === 'config' && (
+          <div className="flex flex-col gap-6 max-w-3xl">
+            <div className="rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h2 className="text-lg font-serif font-semibold mb-2">Sincronizar com Google Sheets</h2>
+              <p className="text-sm mb-4" style={{ color: C.inkMuted }}>
+                Seus dados já ficam salvos automaticamente neste navegador. Para ver os mesmos dados no celular e no computador,
+                conecte uma planilha do Google Sheets — é gratuito, mas exige um cadastro único de alguns minutos no Google Cloud.
+              </p>
+              <div className="rounded-lg p-4 mb-4 text-sm flex flex-col gap-2" style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink }}>
+                <strong>Passo a passo (uma única vez):</strong>
+                <ol className="list-decimal ml-5 flex flex-col gap-1" style={{ color: C.inkMuted }}>
+                  <li>Acesse <span style={{ color: C.pine }}>console.cloud.google.com</span> e crie um projeto novo (ou use um existente).</li>
+                  <li>Em "APIs e serviços" → "Biblioteca", ative a <strong>Google Sheets API</strong>.</li>
+                  <li>Em "APIs e serviços" → "Tela de consentimento OAuth", configure como "Externo" e adicione seu e-mail do Google como usuário de teste.</li>
+                  <li>Em "Credenciais" → "Criar credenciais" → "ID do cliente OAuth", tipo <strong>Aplicativo da Web</strong>.</li>
+                  <li>Em "Origens JavaScript autorizadas", adicione exatamente este endereço: <code className="px-1 rounded" style={{ background: C.goldLight }}>{typeof window !== 'undefined' ? window.location.origin : ''}</code></li>
+                  <li>Copie o "ID do cliente" gerado (termina em <code>.apps.googleusercontent.com</code>) e cole abaixo.</li>
+                </ol>
+                <span className="text-xs mt-1" style={{ color: C.inkMuted }}>
+                  Importante: isso só funciona com a página hospedada em um endereço http/https (ex.: GitHub Pages, Netlify) — não funciona abrindo o arquivo direto do computador (file://).
+                </span>
+              </div>
+
+              <FieldLabel>Client ID do Google Cloud</FieldLabel>
+              <TextInput type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" value={sync.clientId} onChange={(e) => sync.setClientId(e.target.value)} />
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {!sync.connected ? (
+                  <PrimaryButton onClick={handleConnectSheets} disabled={!sync.clientId}>Conectar ao Google</PrimaryButton>
+                ) : (
+                  <>
+                    <SecondaryButton onClick={pullFromSheets} disabled={syncingNow}>{syncingNow ? 'Sincronizando…' : 'Sincronizar agora'}</SecondaryButton>
+                    <SecondaryButton onClick={sync.disconnect}>Desconectar</SecondaryButton>
+                  </>
+                )}
+                {sync.status === 'ready' && sync.connected && (
+                  <span className="text-xs flex items-center gap-1" style={{ color: C.pine }}><Icon name="check" size={14} />Conectado</span>
+                )}
+                {sync.errorMsg && <span className="text-xs" style={{ color: C.alert }}>{sync.errorMsg}</span>}
+              </div>
+
+              {sync.spreadsheetId && (
+                <p className="text-xs mt-3" style={{ color: C.inkMuted }}>
+                  Planilha: <a className="underline" style={{ color: C.pine }} target="_blank" rel="noreferrer"
+                    href={`https://docs.google.com/spreadsheets/d/${sync.spreadsheetId}/edit`}>abrir no Google Sheets</a>
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: C.ink }}>Backup manual</h3>
+              <p className="text-xs mb-4" style={{ color: C.inkMuted }}>Funciona mesmo sem conectar ao Google. Útil para levar os dados de um aparelho para outro.</p>
+              <div className="flex flex-wrap gap-3">
+                <SecondaryButton onClick={handleExportJSON}><span className="flex items-center gap-1.5"><Icon name="download" size={14} />Baixar backup completo (.json)</span></SecondaryButton>
+                <SecondaryButton onClick={handleExportCSV}><span className="flex items-center gap-1.5"><Icon name="download" size={14} />Baixar lançamentos (.csv)</span></SecondaryButton>
+                <label className="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer" style={{ background: C.panel, color: C.ink, border: `1px solid ${C.border}` }}>
+                  <span className="flex items-center gap-1.5"><Icon name="upload" size={14} />Importar backup (.json)</span>
+                  <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files[0] && handleImportJSON(e.target.files[0])} />
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="mt-10 pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" style={{ borderTop: `1px solid ${C.border}` }}>
+          <span className="text-xs" style={{ color: C.inkMuted }}>Os dados ficam salvos neste navegador{sync.connected ? ' e sincronizados com o Google Sheets' : ''}.</span>
+          <button onClick={handleResetData} className="text-xs" style={{ color: resetArmed ? C.alert : C.inkMuted }}>{resetArmed ? 'Clique de novo para confirmar' : 'Redefinir todos os dados'}</button>
+        </div>
+      </div>
+      <Toast message={toast} />
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<FinanceDashboard />);
+</script>
+</body>
+</html>
