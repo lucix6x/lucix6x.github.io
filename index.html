@@ -270,6 +270,7 @@ function useFirestoreSync(onRemoteData) {
       const app = getFirebaseApp(cfg);
       const auth = firebase.auth(app);
       authRef.current = auth;
+      await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
       const credential = mode === 'signup'
         ? await auth.createUserWithEmailAndPassword(email.trim(), password)
         : await auth.signInWithEmailAndPassword(email.trim(), password);
@@ -305,12 +306,28 @@ function useFirestoreSync(onRemoteData) {
     await docRef.current.set({ members: firebase.firestore.FieldValue.arrayUnion(memberUid.trim()) }, { merge: true });
   }, [code]);
 
-  // reconecta sozinho ao carregar a página, se já havia config + código salvos
+  // Restaura a sessão local do Firebase sem salvar a senha no navegador.
   useEffect(() => {
-    if (config && code && firebase.apps.length && firebase.auth().currentUser) { connect(config, code).catch(() => {}); }
-    return () => teardown();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!config) { setAuthReady(true); return undefined; }
+    let disposed = false;
+    let unsubscribe = () => {};
+    try {
+      const app = getFirebaseApp(config);
+      const auth = firebase.auth(app);
+      authRef.current = auth;
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+      unsubscribe = auth.onAuthStateChanged((currentUser) => {
+        if (disposed) return;
+        setUser(currentUser || null);
+        setAuthReady(true);
+        if (currentUser && code) connect(config, code).catch(() => {});
+      });
+    } catch (e) {
+      setAuthError('Não foi possível restaurar a sessão. Entre novamente.');
+      setAuthReady(true);
+    }
+    return () => { disposed = true; unsubscribe(); teardown(); };
+  }, [config, code, connect, teardown]);
 
   return { config, setConfig, code, setCode, connected, status, errorMsg, lastSync, connect, disconnect, pushKey, addMember, user, authReady, authError, authenticate, logout };
 }
@@ -344,6 +361,10 @@ function SecondaryButton({ children, onClick, disabled }) {
 function Toast({ message }) {
   if (!message) return null;
   return <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg z-50" style={{ background: C.pine, color: '#fff' }}>{message}</div>;
+}
+
+function SessionLoading() {
+  return <div className="min-h-screen flex items-center justify-center app-shell" style={{ color: C.ink }}><div className="text-center"><span className="brand-mark"><Icon name="heart" size={22} /></span><p className="text-sm mt-3" style={{ color: C.inkMuted }}>Restaurando sua sessão…</p></div></div>;
 }
 
 function AuthPanel({ sync, configText, setConfigText, code, setCode, onConnected }) {
@@ -735,6 +756,7 @@ function FinanceDashboard() {
   const currentMonthTotal = monthEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const reportIncome = totalIncome;
 
+  if (!sync.authReady) return <SessionLoading />;
   if (!sync.user) return <AuthPanel sync={sync} configText={fbConfigText} setConfigText={setFbConfigText} code={fbCodeInput} setCode={setFbCodeInput} onConnected={() => showToast('Conectado ao banco de dados')} />;
 
   return (
