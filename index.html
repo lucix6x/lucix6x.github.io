@@ -240,7 +240,10 @@ function useFirestoreSync(onRemoteData) {
       try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) {}
       dbRef.current = db;
       const houseRef = db.collection(FIRESTORE_COLLECTION).doc(cod);
-      await houseRef.set({ ownerUid: auth.currentUser.uid, members: firebase.firestore.FieldValue.arrayUnion(auth.currentUser.uid) }, { merge: true });
+      const houseSnapshot = await houseRef.get();
+      if (!houseSnapshot.exists) {
+        await houseRef.set({ ownerUid: auth.currentUser.uid, members: [auth.currentUser.uid] });
+      }
       docRef.current = houseRef;
       unsubRef.current = houseRef.onSnapshot(
         (snap) => {
