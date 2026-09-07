@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Painel financeiro do casal</title>
+<title>Finanças a Dois</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -17,6 +17,12 @@
   html, body { margin: 0; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   .font-serif { font-family: 'Source Serif 4', Georgia, serif; }
   * { box-sizing: border-box; }
+  body { background: #F5F3ED; }
+  .app-shell { background: radial-gradient(circle at 88% 0%, rgba(184,134,62,.12), transparent 26rem), linear-gradient(135deg, #F8F6F0 0%, #EEF3ED 100%); }
+  .brand-mark { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; border-radius: 13px; background: #1F4D3A; color: #F3E8D3; box-shadow: 0 8px 18px rgba(31,77,58,.18); }
+  .brand-kicker { color: #B8863E; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .nav-strip { padding: 6px; border: 1px solid rgba(227,222,207,.9); border-radius: 16px; background: rgba(255,255,255,.58); box-shadow: 0 8px 24px rgba(28,38,32,.04); }
+  .login-panel { box-shadow: 0 24px 70px rgba(28,38,32,.12); }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #D8D2C0; border-radius: 4px; }
 </style>
@@ -100,6 +106,7 @@ const GOAL_CATEGORIES = ['Reserva de emergência', 'Investimento', 'Compra plane
 const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NAV = [
   { id: 'dashboard', label: 'Visão geral', icon: 'piechart' },
+  { id: 'report', label: 'Relatório mensal', icon: 'filetext' },
   { id: 'income', label: 'Renda', icon: 'landmark' },
   { id: 'cards', label: 'Cartões', icon: 'creditcard' },
   { id: 'goals', label: 'Metas', icon: 'piggy' },
@@ -153,7 +160,7 @@ const LocalStore = {
 // ============================================================
 // Sincronização em tempo real com Firestore (Firebase / Google Cloud)
 // Cada casal usa seu próprio projeto Firebase (gratuito) e um
-// "código da casa" que identifica o documento compartilhado.
+// código da casa identifica o documento; a autorização vem do Firebase Auth.
 // ============================================================
 const FIRESTORE_COLLECTION = 'paineis';
 
@@ -181,6 +188,15 @@ function sanitizeCode(code) {
   return String(code || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 60);
 }
 
+function getFirebaseApp(cfg) {
+  const existing = firebase.apps.length ? firebase.app() : null;
+  if (existing && existing.options.projectId !== cfg.projectId) {
+    firebase.apps.forEach((app) => app.delete && app.delete());
+    return firebase.initializeApp(cfg);
+  }
+  return existing || firebase.initializeApp(cfg);
+}
+
 function useFirestoreSync(onRemoteData) {
   const [config, setConfigRaw] = useState(() => LocalStore.get('fb_config') || null);
   const [code, setCodeRaw] = useState(() => LocalStore.get('fb_code') || '');
@@ -188,7 +204,12 @@ function useFirestoreSync(onRemoteData) {
   const [status, setStatus] = useState('idle'); // idle | connecting | ready | error
   const [errorMsg, setErrorMsg] = useState('');
   const [lastSync, setLastSync] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState('');
   const dbRef = useRef(null);
+  const docRef = useRef(null);
+  const authRef = useRef(null);
   const unsubRef = useRef(null);
   const onRemoteDataRef = useRef(onRemoteData);
   onRemoteDataRef.current = onRemoteData;
@@ -205,20 +226,23 @@ function useFirestoreSync(onRemoteData) {
     const cfg = cfgArg || config;
     const cod = sanitizeCode(codeArg || code);
     if (!cfg) throw new Error('Cole a configuração do Firebase antes de conectar.');
-    if (!cod) throw new Error('Defina um código da casa/casal antes de conectar.');
+    if (!cod) throw new Error('Defina um identificador da casa/casal antes de conectar.');
     setStatus('connecting'); setErrorMsg('');
     try {
       teardown();
-      let app;
-      try { app = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg); }
-      catch (e) { firebase.apps.forEach((a) => a.delete && a.delete()); app = firebase.initializeApp(cfg); }
+      const app = getFirebaseApp(cfg);
       const auth = firebase.auth(app);
-      if (!auth.currentUser) await auth.signInAnonymously();
+      authRef.current = auth;
+      if (!auth.currentUser) throw new Error('Faça login com e-mail e senha antes de conectar.');
+      setUser(auth.currentUser);
+      setAuthReady(true);
       const db = firebase.firestore(app);
       try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) {}
       dbRef.current = db;
-      const docRef = db.collection(FIRESTORE_COLLECTION).doc(cod);
-      unsubRef.current = docRef.onSnapshot(
+      const houseRef = db.collection(FIRESTORE_COLLECTION).doc(cod);
+      await houseRef.set({ ownerUid: auth.currentUser.uid, members: firebase.firestore.FieldValue.arrayUnion(auth.currentUser.uid) }, { merge: true });
+      docRef.current = houseRef;
+      unsubRef.current = houseRef.onSnapshot(
         (snap) => {
           setConnected(true); setStatus('ready'); setErrorMsg('');
           if (!snap.metadata.hasPendingWrites) setLastSync(new Date());
@@ -235,24 +259,57 @@ function useFirestoreSync(onRemoteData) {
     }
   }, [config, code, teardown, setConfig, setCode]);
 
+  const authenticate = useCallback(async (cfgArg, mode, email, password) => {
+    const cfg = cfgArg || config;
+    if (!cfg) throw new Error('Cole a configuração do Firebase antes de entrar.');
+    setAuthError('');
+    try {
+      const app = getFirebaseApp(cfg);
+      const auth = firebase.auth(app);
+      authRef.current = auth;
+      const credential = mode === 'signup'
+        ? await auth.createUserWithEmailAndPassword(email.trim(), password)
+        : await auth.signInWithEmailAndPassword(email.trim(), password);
+      setUser(credential.user);
+      setAuthReady(true);
+      setConfig(cfg);
+      return credential.user;
+    } catch (e) {
+      const messages = { 'auth/invalid-credential': 'E-mail ou senha inválidos.', 'auth/email-already-in-use': 'Este e-mail já está cadastrado.', 'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.', 'auth/invalid-email': 'Informe um e-mail válido.', 'auth/operation-not-allowed': 'O login por e-mail e senha está desativado. No Firebase Console, abra Authentication → Sign-in method, ative E-mail/senha e salve.' };
+      const message = messages[e.code] || e.message || String(e);
+      setAuthError(message);
+      throw new Error(message);
+    }
+  }, [config, setConfig]);
+
+  const logout = useCallback(async () => {
+    if (authRef.current) await authRef.current.signOut();
+    teardown(); setUser(null); setAuthReady(false); setStatus('idle');
+  }, [teardown]);
+
   const disconnect = useCallback(() => { teardown(); setStatus('idle'); }, [teardown]);
 
   const pushKey = useCallback(async (key, value) => {
-    if (!dbRef.current || !code) return;
-    await dbRef.current.collection(FIRESTORE_COLLECTION).doc(code).set(
-      { [key]: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+    if (!docRef.current) return;
+    await docRef.current.set(
+      { [key]: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: user ? user.uid : null },
       { merge: true }
     );
+  }, [code, user]);
+
+  const addMember = useCallback(async (memberUid) => {
+    if (!docRef.current || !memberUid.trim()) throw new Error('Informe o UID do parceiro.');
+    await docRef.current.set({ members: firebase.firestore.FieldValue.arrayUnion(memberUid.trim()) }, { merge: true });
   }, [code]);
 
   // reconecta sozinho ao carregar a página, se já havia config + código salvos
   useEffect(() => {
-    if (config && code) { connect(config, code).catch(() => {}); }
+    if (config && code && firebase.apps.length && firebase.auth().currentUser) { connect(config, code).catch(() => {}); }
     return () => teardown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { config, setConfig, code, setCode, connected, status, errorMsg, lastSync, connect, disconnect, pushKey };
+  return { config, setConfig, code, setCode, connected, status, errorMsg, lastSync, connect, disconnect, pushKey, addMember, user, authReady, authError, authenticate, logout };
 }
 
 // ============================================================
@@ -284,6 +341,40 @@ function SecondaryButton({ children, onClick, disabled }) {
 function Toast({ message }) {
   if (!message) return null;
   return <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-sm shadow-lg z-50" style={{ background: C.pine, color: '#fff' }}>{message}</div>;
+}
+
+function AuthPanel({ sync, configText, setConfigText, code, setCode, onConnected }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState('login');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const submit = async () => {
+    setMessage(''); setBusy(true);
+    try {
+      const cfg = parseFirebaseConfigInput(configText);
+      await sync.authenticate(cfg, mode, email, password);
+      await sync.connect(cfg, code);
+      onConnected();
+    } catch (e) { setMessage(e.message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 app-shell" style={{ color: C.ink }}>
+      <div className="w-full max-w-md rounded-2xl p-6 md:p-8 login-panel" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center gap-3 mb-5"><span className="brand-mark"><Icon name="heart" size={22} /></span><div><div className="brand-kicker">Planejamento compartilhado</div><h1 className="text-2xl font-serif font-semibold">Finanças a Dois</h1></div></div>
+        <p className="text-sm mt-2 mb-6" style={{ color: C.inkMuted }}>Entre com sua conta para acessar os dados compartilhados.</p>
+        <FieldLabel>Configuração do Firebase</FieldLabel>
+        <textarea rows={5} placeholder={'Cole aqui o objeto firebaseConfig'} value={configText} onChange={(e) => setConfigText(e.target.value)} className="w-full rounded-lg px-3 py-2 text-xs font-mono outline-none" style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink }} />
+        <div className="mt-3"><FieldLabel>Identificador da casa</FieldLabel><TextInput value={code} onChange={(e) => setCode(e.target.value)} placeholder="ex.: casa-silva" /></div>
+        <div className="mt-3"><FieldLabel>E-mail</FieldLabel><TextInput type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@exemplo.com" /></div>
+        <div className="mt-3"><FieldLabel>Senha</FieldLabel><TextInput type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" /></div>
+        {(message || sync.authError) && <p className="text-sm mt-3" style={{ color: C.alert }}>{message || sync.authError}</p>}
+        <div className="mt-5 flex flex-col gap-3"><PrimaryButton onClick={submit} disabled={busy || !configText || !code || !email || !password}>{busy ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta e entrar'}</PrimaryButton><button onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }} className="text-sm" style={{ color: C.pine }}>{mode === 'login' ? 'Ainda não tenho conta' : 'Já tenho uma conta'}</button></div>
+        <p className="text-xs mt-6" style={{ color: C.inkMuted }}>O identificador apenas localiza a casa. O acesso aos dados depende da sua conta e das regras do Firestore.</p>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
@@ -384,6 +475,7 @@ function FinanceDashboard() {
   const [showAllMonths, setShowAllMonths] = useState(false);
   const [fbConfigText, setFbConfigText] = useState(() => { const c = LocalStore.get('fb_config'); return c ? JSON.stringify(c, null, 2) : ''; });
   const [fbCodeInput, setFbCodeInput] = useState(() => LocalStore.get('fb_code') || '');
+  const [partnerUid, setPartnerUid] = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2200); };
 
@@ -396,10 +488,20 @@ function FinanceDashboard() {
     if (data.goals !== undefined) { setGoals(data.goals); LocalStore.set('goals', data.goals); }
     if (data.budgetRule !== undefined) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
     if (data.cards !== undefined) { setCards(data.cards); LocalStore.set('cards', data.cards); }
-    if (!isLocalEcho) showToast('Dados atualizados');
+    if (!isLocalEcho) {
+      showToast(data.updatedBy && syncUserId() !== data.updatedBy ? 'Seu parceiro lançou um gasto' : 'Dados atualizados');
+      if (data.updatedBy && syncUserId() !== data.updatedBy && 'Notification' in window && Notification.permission === 'granted') new Notification('Novo lançamento', { body: 'Seu parceiro atualizou o painel financeiro.' });
+    }
   }, []);
 
+  const syncUserId = () => { try { return firebase.auth().currentUser && firebase.auth().currentUser.uid; } catch (e) { return null; } };
+
   const sync = useFirestoreSync(applyRemoteData);
+
+  const requestNotifications = async () => {
+    if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+    showToast(Notification.permission === 'granted' ? 'Notificações ativadas' : 'Notificações não autorizadas');
+  };
 
   // ---- Persistência: sempre local; envia para o Firestore se conectado ----
   const persist = useCallback((key, value) => {
@@ -422,6 +524,11 @@ function FinanceDashboard() {
     } catch (e) {
       showToast('Não foi possível conectar: ' + e.message);
     }
+  };
+
+  const handleAddMember = async () => {
+    try { await sync.addMember(partnerUid); setPartnerUid(''); showToast('Parceiro autorizado nesta casa'); }
+    catch (e) { showToast('Não foi possível autorizar: ' + e.message); }
   };
 
   // ---- Derivados ----
@@ -461,7 +568,7 @@ function FinanceDashboard() {
   const buildEntries = (form) => {
     const amount = parseFloat(form.amount);
     const isCredit = form.paymentMethod === 'credito';
-    const n = isCredit ? Math.max(1, parseInt(form.installments, 10) || 1) : 1;
+    const n = isCredit ? Math.max(1, parseInt(form.installments, 10) || 1) : (form.recurrence === 'Mensal' ? 12 : 1);
     const groupId = n > 1 ? uid() : null;
     const perInstallment = Math.round((amount / n) * 100) / 100;
     const list = [];
@@ -620,22 +727,32 @@ function FinanceDashboard() {
     return [...list].sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [entries, monthEntries, showAllMonths, historyFilter]);
 
+  const previousMonthKey = useMemo(() => addMonthsToDate(`${selectedMonth}-01`, -1).slice(0, 7), [selectedMonth]);
+  const previousMonthTotal = useMemo(() => entries.filter((e) => monthKeyOf(e.date) === previousMonthKey).reduce((sum, e) => sum + Number(e.amount || 0), 0), [entries, previousMonthKey]);
+  const currentMonthTotal = monthEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const reportIncome = totalIncome;
+
+  if (!sync.user) return <AuthPanel sync={sync} configText={fbConfigText} setConfigText={setFbConfigText} code={fbCodeInput} setCode={setFbCodeInput} onConnected={() => showToast('Conectado ao banco de dados')} />;
+
   return (
-    <div className="min-h-screen w-full font-sans" style={{ background: C.bg, color: C.ink }}>
+    <div className="min-h-screen w-full font-sans app-shell" style={{ color: C.ink }}>
       <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-serif font-semibold" style={{ color: C.ink }}>Painel financeiro do casal</h1>
-            <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Renda, gastos, metas e investimentos em um só lugar.</p>
+          <div className="flex items-center gap-3">
+            <span className="brand-mark"><Icon name="heart" size={22} /></span>
+            <div><div className="brand-kicker">Planejamento compartilhado</div><h1 className="text-2xl md:text-3xl font-serif font-semibold" style={{ color: C.ink }}>Finanças a Dois</h1>
+            <p className="text-sm mt-1" style={{ color: C.inkMuted }}>Renda, gastos, metas e investimentos em um só lugar. {sync.user.email}</p></div>
           </div>
           <button className="md:hidden rounded-lg p-2" style={{ background: C.panel, border: `1px solid ${C.border}` }} onClick={() => setMobileNavOpen((v) => !v)}>
             <Icon name={mobileNavOpen ? 'x' : 'menu'} size={18} />
           </button>
         </div>
 
+        {sync.user && <div className="flex justify-end gap-3 mb-4"><button onClick={requestNotifications} className="text-xs" style={{ color: C.pine }}>Ativar notificações</button><button onClick={sync.logout} className="text-xs" style={{ color: C.inkMuted }}>Sair</button></div>}
+
         {/* Nav */}
-        <div className={`${mobileNavOpen ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 mb-6`}>
+        <div className={`nav-strip ${mobileNavOpen ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 mb-6`}>
           {NAV.map((n) => {
             const active = activeTab === n.id;
             return (
@@ -792,6 +909,14 @@ function FinanceDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'report' && (
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-serif font-semibold">Relatório mensal</h2><p className="text-sm" style={{ color: C.inkMuted }}>{monthLabel(selectedMonth)} · comparação com {monthLabel(previousMonthKey)}</p></div><div className="flex gap-2"><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} /><SecondaryButton onClick={() => window.print()}><Icon name="download" size={14} /> Imprimir / PDF</SecondaryButton></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><StatCard label="Total gasto no mês" value={formatBRL(currentMonthTotal)} sub={previousMonthTotal ? `${currentMonthTotal >= previousMonthTotal ? '+' : ''}${((currentMonthTotal / previousMonthTotal - 1) * 100).toFixed(1)}% vs. mês anterior` : 'Sem base anterior'} accent={C.alert} /><StatCard label="Mês anterior" value={formatBRL(previousMonthTotal)} /><StatCard label="Quanto sobrou da renda" value={formatBRL(reportIncome - currentMonthTotal)} sub={`Renda considerada: ${formatBRL(reportIncome)}`} accent={reportIncome - currentMonthTotal < 0 ? C.alert : C.pine} /></div>
+            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}><h3 className="text-sm font-medium mb-4">Total por categoria</h3>{CATEGORIES.map((category) => { const value = monthEntries.filter((e) => e.category === category.id).reduce((sum, e) => sum + Number(e.amount || 0), 0); return <div key={category.id} className="flex items-center justify-between py-2 border-b last:border-b-0" style={{ borderColor: C.border }}><span className="flex items-center gap-2 text-sm"><Icon name={category.icon} size={15} style={{ color: category.color }} />{category.label}</span><span className="text-sm tabular-nums">{formatBRL(value)}</span></div>; })}</div>
           </div>
         )}
 
@@ -980,19 +1105,21 @@ function FinanceDashboard() {
                 <ol className="list-decimal ml-5 flex flex-col gap-1" style={{ color: C.inkMuted }}>
                   <li>Acesse <span style={{ color: C.pine }}>console.firebase.google.com</span> e crie um projeto (pode ser dentro do seu projeto do Google Cloud existente).</li>
                   <li>No menu lateral, abra <strong>Firestore Database</strong> → "Criar banco de dados" → modo produção → escolha uma região.</li>
-                  <li>Em "Regras", cole o texto abaixo (permite acesso só a usuários autenticados anonimamente) e publique:
+                  <li>Em "Regras", cole o texto abaixo e publique. O proprietário autoriza o segundo usuário pelo UID:
                     <pre className="mt-1 p-2 rounded text-xs overflow-x-auto" style={{ background: C.ink, color: C.panelAlt }}>{`rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
     match /${FIRESTORE_COLLECTION}/{codigo} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null && (resource.data.ownerUid == request.auth.uid || request.auth.uid in resource.data.members);
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid && request.auth.uid in request.resource.data.members;
+      allow update: if request.auth != null && (resource.data.ownerUid == request.auth.uid || request.auth.uid in resource.data.members) && request.resource.data.ownerUid == resource.data.ownerUid;
     }
   }
 }`}</pre>
                   </li>
-                  <li>Em "Authentication" → "Sign-in method", ative o provedor <strong>Anônimo</strong>.</li>
+                  <li>Em "Authentication" → "Sign-in method", ative o provedor <strong>E-mail/senha</strong>.</li>
                   <li>No ícone de engrenagem → "Configurações do projeto" → role até "Seus aplicativos" → clique em "Web" (ícone {'</>'}) e registre um app. Copie o objeto <code>firebaseConfig</code> mostrado e cole no campo abaixo.</li>
-                  <li>Escolha um "código da casa" — qualquer palavra combinada entre vocês dois (ex.: <code>joao-e-maria</code>) — e use o mesmo código nos dois aparelhos.</li>
+                  <li>Escolha um identificador da casa (ex.: <code>joao-e-maria</code>). Ele não substitui a senha nem libera acesso sozinho.</li>
                 </ol>
                 <span className="text-xs mt-1" style={{ color: C.inkMuted }}>
                   Funciona só com a página hospedada em http/https (GitHub Pages já serve). Depois de conectado uma vez,
@@ -1010,7 +1137,7 @@ service cloud.firestore {
                 style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink }}
               />
               <div className="mt-3">
-                <FieldLabel>Código da casa/casal</FieldLabel>
+                <FieldLabel>Identificador da casa/casal</FieldLabel>
                 <TextInput type="text" placeholder="ex.: joao-e-maria" value={fbCodeInput} onChange={(e) => setFbCodeInput(e.target.value)} />
               </div>
 
@@ -1031,11 +1158,24 @@ service cloud.firestore {
                 {sync.errorMsg && <span className="text-xs" style={{ color: C.alert }}>{sync.errorMsg}</span>}
               </div>
 
+              {sync.user && <div className="rounded-lg p-4 mt-4" style={{ background: C.goldLight, border: `1px solid ${C.border}` }}>
+                <FieldLabel>Seu UID do Firebase</FieldLabel>
+                <p className="text-xs break-all select-all" style={{ color: C.ink }}>{sync.user.uid}</p>
+                <p className="text-xs mt-2" style={{ color: C.inkMuted }}>Se esta conta ainda não foi autorizada, envie este UID ao proprietário da casa. Depois clique em conectar novamente.</p>
+              </div>}
+
               {sync.connected && (
-                <p className="text-xs mt-3" style={{ color: C.inkMuted }}>
+                <div className="mt-3 flex flex-col gap-3">
+                  <p className="text-xs" style={{ color: C.inkMuted }}>
                   Abra este mesmo painel em outro aparelho, cole a mesma configuração e o mesmo código da casa
                   (<strong>{sync.code}</strong>) para ver os dados sincronizados automaticamente.
-                </p>
+                  </p>
+                  <div className="rounded-lg p-4" style={{ background: C.panelAlt, border: `1px solid ${C.border}` }}>
+                    <FieldLabel>UID do parceiro</FieldLabel>
+                    <div className="flex gap-2"><TextInput value={partnerUid} onChange={(e) => setPartnerUid(e.target.value)} placeholder="Cole o UID exibido na conta do parceiro" /><PrimaryButton onClick={handleAddMember} disabled={!partnerUid.trim()}>Autorizar</PrimaryButton></div>
+                    <p className="text-xs mt-2" style={{ color: C.inkMuted }}>Seu UID: <strong>{sync.user && sync.user.uid}</strong>. O primeiro usuário deve compartilhar o UID da outra conta depois que ela for criada.</p>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1144,7 +1284,9 @@ service cloud.firestore {
               </div>
             )}
 
-            <div className="mt-4"><FieldLabel>Tipo</FieldLabel><Select value={entryForm.budgetType} onChange={(e) => setEntryForm({ ...entryForm, budgetType: e.target.value })}>{BUDGET_TYPES.map((bt) => <option key={bt.id} value={bt.id}>{bt.label}</option>)}</Select></div>
+            <div className="grid grid-cols-2 gap-4 mt-4"><div><FieldLabel>Recorrência</FieldLabel><Select value={entryForm.recurrence} onChange={(e) => setEntryForm({ ...entryForm, recurrence: e.target.value })}>{RECURRENCES.map((recurrence) => <option key={recurrence} value={recurrence}>{recurrence}</option>)}</Select></div><div><FieldLabel>Tipo</FieldLabel><Select value={entryForm.budgetType} onChange={(e) => setEntryForm({ ...entryForm, budgetType: e.target.value })}>{BUDGET_TYPES.map((bt) => <option key={bt.id} value={bt.id}>{bt.label}</option>)}</Select></div></div>
+
+            {entryForm.recurrence === 'Mensal' && <p className="text-xs mt-2" style={{ color: C.inkMuted }}>Este gasto será criado para o mês escolhido e os 11 meses seguintes.</p>}
 
             {entryError && <p className="text-sm mt-3" style={{ color: C.alert }}>{entryError}</p>}
             <div className="mt-5"><PrimaryButton onClick={handleAddEntry}>Salvar gasto</PrimaryButton></div>
