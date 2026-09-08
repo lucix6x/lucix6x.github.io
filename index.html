@@ -77,6 +77,7 @@ function Icon({ name, size = 16, style, className }) {
     creditcard: <><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/></>,
     zap: <><path d="M13 2 3 14h8l-1 8 11-14h-8z"/></>,
     calendar: <><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></>,
+    paw: <><circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><circle cx="19.5" cy="13.5" r="1.7"/><path d="M12 12.5c-3.2 0-6 2-6 4.6 0 1.6 1.4 2.7 3 2.4 1-.2 2-.7 3-.7s2 .5 3 .7c1.6.3 3-.8 3-2.4 0-2.6-2.8-4.6-6-4.6z"/></>,
   };
   return <svg {...p}>{paths[name] || null}</svg>;
 }
@@ -93,9 +94,11 @@ const CATEGORIES = [
   { id: 'lazer', label: 'Lazer', icon: 'gamepad', budgetType: 'desejo', color: '#7C6A9C' },
   { id: 'educacao', label: 'Educação', icon: 'grad', budgetType: 'desejo', color: '#4E7A6B' },
   { id: 'investimentos', label: 'Investimentos', icon: 'trending', budgetType: 'poupanca', color: '#2F7A54' },
+  { id: 'pet', label: 'Pet', icon: 'paw', budgetType: 'necessidade', color: '#8A5A44' },
   { id: 'outros', label: 'Outros', icon: 'more', budgetType: 'desejo', color: '#9AA39A' },
 ];
 const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+const PET_SUBCATEGORIES = ['Ração', 'Areia higiênica', 'Brinquedos', 'Saúde/veterinário', 'Banho e tosa', 'Acessórios', 'Outros'];
 const BUDGET_TYPES = [
   { id: 'necessidade', label: 'Necessidade' },
   { id: 'desejo', label: 'Desejo' },
@@ -113,7 +116,7 @@ const NAV = [
   { id: 'history', label: 'Histórico', icon: 'history' },
   { id: 'config', label: 'Sincronização', icon: 'cloud' },
 ];
-const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards'];
+const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards', 'cashMovements'];
 const PAYMENT_METHODS = [
   { id: 'debito', label: 'Dinheiro / Pix / Débito' },
   { id: 'credito', label: 'Cartão de crédito' },
@@ -138,7 +141,7 @@ const last6MonthKeys = (endKey) => {
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const defaultIncome = { p1: { name: 'Pessoa 1', amount: 0 }, p2: { name: 'Pessoa 2', amount: 0 } };
 const defaultBudgetRule = { necessidade: 50, desejo: 30, poupanca: 20 };
-const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1 });
+const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '' });
 const addMonthsToDate = (iso, n) => {
   const [y, m, d] = iso.split('-').map(Number);
   let mm = m - 1 + n, yy = y;
@@ -480,6 +483,9 @@ function FinanceDashboard() {
   const [goals, setGoals] = useState(() => LocalStore.get('goals') || []);
   const [budgetRule, setBudgetRule] = useState(() => LocalStore.get('budgetRule') || defaultBudgetRule);
   const [cards, setCards] = useState(() => LocalStore.get('cards') || []);
+  const [cashMovements, setCashMovements] = useState(() => LocalStore.get('cashMovements') || []);
+  const [cashForm, setCashForm] = useState({ type: 'entrada', amount: '', description: '', date: todayISO() });
+  const [cashError, setCashError] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -512,6 +518,7 @@ function FinanceDashboard() {
     if (data.goals !== undefined) { setGoals(data.goals); LocalStore.set('goals', data.goals); }
     if (data.budgetRule !== undefined) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
     if (data.cards !== undefined) { setCards(data.cards); LocalStore.set('cards', data.cards); }
+    if (data.cashMovements !== undefined) { setCashMovements(data.cashMovements); LocalStore.set('cashMovements', data.cashMovements); }
     if (!isLocalEcho) {
       showToast(data.updatedBy && syncUserId() !== data.updatedBy ? 'Seu parceiro lançou um gasto' : 'Dados atualizados');
       if (data.updatedBy && syncUserId() !== data.updatedBy && 'Notification' in window && Notification.permission === 'granted') new Notification('Novo lançamento', { body: 'Seu parceiro atualizou o painel financeiro.' });
@@ -542,7 +549,7 @@ function FinanceDashboard() {
       showToast('Conectado ao banco de dados');
       // envia o estado atual como primeira sincronização, caso o documento esteja vazio
       SYNC_KEYS.forEach((k) => {
-        const val = { income, entries, goals, budgetRule, cards }[k];
+        const val = { income, entries, goals, budgetRule, cards, cashMovements }[k];
         sync.pushKey(k, val).catch(() => {});
       });
     } catch (e) {
@@ -613,6 +620,7 @@ function FinanceDashboard() {
         installments: n,
         installmentNumber: i + 1,
         groupId,
+        petSubcategory: form.category === 'pet' ? (form.petSubcategory || '') : '',
       });
     }
     return list;
@@ -624,7 +632,8 @@ function FinanceDashboard() {
     if (!entryForm.date) return setEntryError('Escolha uma data.');
     if (!amount || amount <= 0) return setEntryError('Informe um valor maior que zero.');
     if (entryForm.paymentMethod === 'credito' && !entryForm.cardId) return setEntryError('Escolha o cartão usado.');
-    const form = { ...entryForm, description: entryForm.description.trim() || catById(entryForm.category).label };
+    const defaultDesc = entryForm.category === 'pet' && entryForm.petSubcategory ? `Pet · ${entryForm.petSubcategory}` : catById(entryForm.category).label;
+    const form = { ...entryForm, description: entryForm.description.trim() || defaultDesc };
     const newEntries = buildEntries(form);
     const updated = [...entries, ...newEntries];
     setEntries(updated); persist('entries', updated);
@@ -670,6 +679,27 @@ function FinanceDashboard() {
   const totalCardInvoices = cardInvoices.reduce((s, c) => s + c.spent, 0);
   const nextDueCard = useMemo(() => cardInvoices.filter((c) => c.spent > 0).sort((a, b) => a.daysToDue - b.daysToDue)[0], [cardInvoices]);
 
+  // ---- Gasto com pets no mês selecionado ----
+  const petSpentThisMonth = useMemo(() =>
+    entries.filter((e) => e.category === 'pet' && monthKeyOf(e.date) === selectedMonth).reduce((s, e) => s + Number(e.amount || 0), 0),
+    [entries, selectedMonth]);
+
+  // ---- Handlers: caixa do casal (dinheiro disponível) ----
+  const cashBalance = useMemo(() => cashMovements.reduce((s, m) => s + (m.type === 'entrada' ? Number(m.amount) : -Number(m.amount)), 0), [cashMovements]);
+  const handleAddCashMovement = () => {
+    setCashError('');
+    const amount = parseFloat(cashForm.amount);
+    if (!amount || amount <= 0) return setCashError('Informe um valor maior que zero.');
+    if (!cashForm.date) return setCashError('Escolha uma data.');
+    if (cashForm.type === 'saida' && amount > cashBalance) return setCashError('Esse valor é maior do que o dinheiro disponível em caixa.');
+    const movement = { id: uid(), type: cashForm.type, amount, description: cashForm.description.trim() || (cashForm.type === 'entrada' ? 'Entrada' : 'Retirada'), date: cashForm.date };
+    const updated = [...cashMovements, movement];
+    setCashMovements(updated); persist('cashMovements', updated);
+    setCashForm({ type: cashForm.type, amount: '', description: '', date: todayISO() });
+    showToast(cashForm.type === 'entrada' ? 'Dinheiro adicionado ao caixa' : 'Retirada registrada');
+  };
+  const handleDeleteCashMovement = (id) => { const updated = cashMovements.filter((m) => m.id !== id); setCashMovements(updated); persist('cashMovements', updated); };
+
   // ---- Handlers: renda e regra ----
   const handleSaveIncome = () => {
     const cleaned = { p1: { name: income.p1.name || 'Pessoa 1', amount: Number(income.p1.amount) || 0 }, p2: { name: income.p2.name || 'Pessoa 2', amount: Number(income.p2.amount) || 0 } };
@@ -704,8 +734,8 @@ function FinanceDashboard() {
 
   const handleResetData = () => {
     if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000); return; }
-    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]);
-    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []);
+    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]);
+    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []);
     setResetArmed(false); showToast('Dados redefinidos');
   };
 
@@ -717,12 +747,12 @@ function FinanceDashboard() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
   const handleExportJSON = () => {
-    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule, cards }, null, 2), 'application/json');
+    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule, cards, cashMovements }, null, 2), 'application/json');
     showToast('Backup .json baixado');
   };
   const handleExportCSV = () => {
-    const header = ['data', 'descricao', 'categoria', 'valor', 'pessoa', 'tipo', 'recorrencia', 'forma_pagamento', 'cartao', 'parcela'];
-    const rows = entries.map((e) => [e.date, e.description, catById(e.category).label, e.amount, e.person, e.budgetType, e.recurrence, e.paymentMethod === 'credito' ? 'Cartão de crédito' : 'Dinheiro/Pix/Débito', e.cardId ? (cards.find((c) => c.id === e.cardId) || {}).name || '' : '', e.installments > 1 ? `${e.installmentNumber}/${e.installments}` : '']);
+    const header = ['data', 'descricao', 'categoria', 'subcategoria_pet', 'valor', 'pessoa', 'tipo', 'recorrencia', 'forma_pagamento', 'cartao', 'parcela'];
+    const rows = entries.map((e) => [e.date, e.description, catById(e.category).label, e.petSubcategory || '', e.amount, e.person, e.budgetType, e.recurrence, e.paymentMethod === 'credito' ? 'Cartão de crédito' : 'Dinheiro/Pix/Débito', e.cardId ? (cards.find((c) => c.id === e.cardId) || {}).name || '' : '', e.installments > 1 ? `${e.installmentNumber}/${e.installments}` : '']);
     const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     downloadFile('lancamentos.csv', '\ufeff' + csv, 'text/csv;charset=utf-8');
     showToast('Planilha .csv baixada — pode abrir no Google Sheets ou Excel');
@@ -737,6 +767,7 @@ function FinanceDashboard() {
         if (data.goals) { setGoals(data.goals); persist('goals', data.goals); }
         if (data.budgetRule) { setBudgetRule(data.budgetRule); persist('budgetRule', data.budgetRule); }
         if (data.cards) { setCards(data.cards); persist('cards', data.cards); }
+        if (data.cashMovements) { setCashMovements(data.cashMovements); persist('cashMovements', data.cashMovements); }
         showToast('Backup importado com sucesso');
       } catch (e) { showToast('Arquivo inválido'); }
     };
@@ -820,6 +851,8 @@ function FinanceDashboard() {
               <StatCard label="Faturas de cartão (mês)" value={formatBRL(totalCardInvoices)}
                 sub={nextDueCard ? `${nextDueCard.name} vence em ${nextDueCard.daysToDue}d · ${formatBRL(nextDueCard.spent)}` : (cards.length ? 'Nenhum gasto no cartão este mês' : 'Cadastre um cartão na aba Cartões')}
                 accent={C.gold} />
+              <StatCard label="Gasto com pets (mês)" value={formatBRL(petSpentThisMonth)} sub="Ração, areia, saúde e afins" accent="#8A5A44" />
+              <StatCard label="Dinheiro em caixa" value={formatBRL(cashBalance)} sub="Disponível em espécie/carteira" accent={cashBalance < 0 ? C.alert : C.pine} />
             </div>
 
             {cardInvoices.some((c) => c.spent > 0) && (
@@ -976,7 +1009,59 @@ function FinanceDashboard() {
           </div>
         )}
 
-        {/* ---------------- CARTÕES ---------------- */}
+        {/* ---------------- CAIXA DO CASAL ---------------- */}
+        {activeTab === 'income' && (
+          <div className="rounded-xl p-6 mt-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-serif font-semibold">Caixa do casal</h3>
+                <p className="text-xs" style={{ color: C.inkMuted }}>Dinheiro disponível em espécie, carteira ou conta corrente — registrem entradas e retiradas conforme usarem.</p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs" style={{ color: C.inkMuted }}>Saldo atual</span>
+                <div className="text-2xl font-serif font-semibold tabular-nums" style={{ color: cashBalance < 0 ? C.alert : C.pine }}>{formatBRL(cashBalance)}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <div className="sm:col-span-1">
+                <FieldLabel>Tipo</FieldLabel>
+                <div className="flex gap-2">
+                  {[{ id: 'entrada', label: 'Adicionar' }, { id: 'saida', label: 'Remover' }].map((t) => {
+                    const active = cashForm.type === t.id;
+                    return (
+                      <button key={t.id} type="button" onClick={() => setCashForm({ ...cashForm, type: t.id })}
+                        className="flex-1 rounded-lg px-2 py-2 text-xs"
+                        style={{ background: active ? (t.id === 'entrada' ? C.pine : C.alert) : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? (t.id === 'entrada' ? C.pine : C.alert) : C.border}` }}>
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" placeholder="0,00" value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })} /></div>
+              <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={cashForm.date} onChange={(e) => setCashForm({ ...cashForm, date: e.target.value })} /></div>
+              <div><FieldLabel>Descrição (opcional)</FieldLabel><TextInput type="text" placeholder="Ex.: Troco, saque, pagamento…" value={cashForm.description} onChange={(e) => setCashForm({ ...cashForm, description: e.target.value })} /></div>
+            </div>
+            {cashError && <p className="text-sm mt-3" style={{ color: C.alert }}>{cashError}</p>}
+            <div className="mt-4"><PrimaryButton onClick={handleAddCashMovement}>{cashForm.type === 'entrada' ? 'Adicionar ao caixa' : 'Registrar retirada'}</PrimaryButton></div>
+
+            {cashMovements.length > 0 && (
+              <div className="mt-6 divide-y" style={{ borderColor: C.border }}>
+                {[...cashMovements].sort((a, b) => (a.date < b.date ? 1 : -1)).map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 py-2.5">
+                    <div className="rounded-full p-2 shrink-0" style={{ background: m.type === 'entrada' ? C.pineLight : C.alertLight }}>
+                      <Icon name={m.type === 'entrada' ? 'plus' : 'trash'} size={13} style={{ color: m.type === 'entrada' ? C.pine : C.alert }} />
+                    </div>
+                    <div className="flex-1 min-w-0"><p className="text-sm truncate" style={{ color: C.ink }}>{m.description}</p><p className="text-xs" style={{ color: C.inkMuted }}>{m.date}</p></div>
+                    <span className="text-sm tabular-nums shrink-0" style={{ color: m.type === 'entrada' ? C.pine : C.alert }}>{m.type === 'entrada' ? '+' : '−'} {formatBRL(m.amount)}</span>
+                    <button onClick={() => handleDeleteCashMovement(m.id)} className="shrink-0"><Icon name="x" size={14} style={{ color: C.inkMuted }} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === 'cards' && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-2 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
@@ -1099,7 +1184,7 @@ function FinanceDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
                           <p className="text-xs" style={{ color: C.inkMuted }}>
-                            {e.date} · {e.person} · {cat.label}
+                            {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>}
                             {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
                             {!card && e.recurrence !== 'Único' && <> · {e.recurrence}</>}
                           </p>
@@ -1261,6 +1346,23 @@ service cloud.firestore {
                 })}
               </div>
             </div>
+
+            {entryForm.category === 'pet' && (
+              <div className="mt-4"><FieldLabel>Tipo de gasto com o pet</FieldLabel>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {PET_SUBCATEGORIES.map((s) => {
+                    const active = entryForm.petSubcategory === s;
+                    return (
+                      <button key={s} type="button" onClick={() => setEntryForm({ ...entryForm, petSubcategory: s })}
+                        className="shrink-0 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap"
+                        style={{ background: active ? C.gold : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? C.gold : C.border}` }}>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="mt-4"><FieldLabel>Descrição (opcional)</FieldLabel>
               <TextInput type="text" placeholder="Ex.: Mercado do mês, cinema…" value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} />
