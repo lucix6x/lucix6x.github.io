@@ -141,6 +141,7 @@ const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','
 const NAV = [
   { id: 'dashboard', label: 'Visão geral', icon: 'piechart' },
   { id: 'expenses', label: 'Gastos', icon: 'receipt' },
+  { id: 'partner', label: 'Parceiro', icon: 'car' },
   { id: 'report', label: 'Relatório mensal', icon: 'filetext' },
   { id: 'income', label: 'Renda', icon: 'landmark' },
   { id: 'cards', label: 'Cartões', icon: 'creditcard' },
@@ -149,7 +150,7 @@ const NAV = [
   { id: 'activity', label: 'Atividades', icon: 'zap' },
   { id: 'config', label: 'Sincronização', icon: 'cloud' },
 ];
-const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards', 'cashMovements', 'categoryBudgets', 'activityLog'];
+const SYNC_KEYS = ['income', 'entries', 'partnerEntries', 'goals', 'budgetRule', 'cards', 'cashMovements', 'categoryBudgets', 'activityLog'];
 const PAYMENT_METHODS = [
   { id: 'debito', label: 'Dinheiro / Pix / Débito' },
   { id: 'credito', label: 'Cartão de crédito' },
@@ -175,6 +176,14 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const defaultIncome = { p1: { name: 'Pessoa 1', amount: 0 }, p2: { name: 'Pessoa 2', amount: 0 } };
 const defaultBudgetRule = { necessidade: 50, desejo: 30, poupanca: 20 };
 const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '', receipt: '' });
+const PARTNER_EXPENSE_CATEGORIES = [
+  { id: 'combustivel', label: 'Combustível' },
+  { id: 'pecas', label: 'Peças' },
+  { id: 'manutencao', label: 'Manutenção' },
+  { id: 'lavagem', label: 'Lavagem' },
+  { id: 'outros', label: 'Outros' },
+];
+const emptyPartnerForm = () => ({ date: todayISO(), type: 'ganho', vehicle: 'moto', category: 'combustivel', amount: '', kilometers: '', description: '' });
 const addMonthsToDate = (iso, n) => {
   const [y, m, d] = iso.split('-').map(Number);
   let mm = m - 1 + n, yy = y;
@@ -513,6 +522,7 @@ function TrendChart({ data, referenceValue, width = 560, height = 220 }) {
 function FinanceDashboard() {
   const [income, setIncome] = useState(() => LocalStore.get('income') || defaultIncome);
   const [entries, setEntries] = useState(() => LocalStore.get('entries') || []);
+  const [partnerEntries, setPartnerEntries] = useState(() => LocalStore.get('partnerEntries') || []);
   const [goals, setGoals] = useState(() => LocalStore.get('goals') || []);
   const [budgetRule, setBudgetRule] = useState(() => LocalStore.get('budgetRule') || defaultBudgetRule);
   const [cards, setCards] = useState(() => LocalStore.get('cards') || []);
@@ -541,6 +551,8 @@ function FinanceDashboard() {
   
   const [entryForm, setEntryForm] = useState(emptyEntryForm());
   const [entryError, setEntryError] = useState('');
+  const [partnerForm, setPartnerForm] = useState(emptyPartnerForm());
+  const [partnerError, setPartnerError] = useState('');
   const [goalForm, setGoalForm] = useState(emptyGoalForm());
   const [goalError, setGoalError] = useState('');
   const [contribDrafts, setContribDrafts] = useState({});
@@ -566,6 +578,7 @@ function FinanceDashboard() {
   const applyRemoteData = useCallback((data, isLocalEcho) => {
     if (data.income !== undefined) { setIncome(data.income); LocalStore.set('income', data.income); }
     if (data.entries !== undefined) { setEntries(data.entries); LocalStore.set('entries', data.entries); }
+    if (data.partnerEntries !== undefined) { setPartnerEntries(data.partnerEntries); LocalStore.set('partnerEntries', data.partnerEntries); }
     if (data.goals !== undefined) { setGoals(data.goals); LocalStore.set('goals', data.goals); }
     if (data.budgetRule !== undefined) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
     if (data.cards !== undefined) { setCards(data.cards); LocalStore.set('cards', data.cards); }
@@ -613,7 +626,7 @@ function FinanceDashboard() {
       showToast('Conectado ao banco de dados');
       // envia o estado atual como primeira sincronização, caso o documento esteja vazio
       SYNC_KEYS.forEach((k) => {
-        const val = { income, entries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }[k];
+        const val = { income, entries, partnerEntries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }[k];
         sync.pushKey(k, val).catch(() => {});
       });
     } catch (e) {
@@ -746,6 +759,35 @@ function FinanceDashboard() {
   };
   const handleDeleteEntry = (id) => { const target = entries.find((e) => e.id === id); const updated = entries.filter((e) => e.id !== id); setEntries(updated); persist('entries', updated); if (target) logActivity(`removeu o lançamento "${target.description}" (${formatBRL(target.amount)})`); };
 
+  // ---- Painel do parceiro: entregas, abastecimentos e manutenção ----
+  const handleAddPartnerEntry = () => {
+    setPartnerError('');
+    const amount = parseFloat(partnerForm.amount);
+    if (!partnerForm.date) return setPartnerError('Escolha uma data.');
+    if (!amount || amount <= 0) return setPartnerError('Informe um valor maior que zero.');
+    const item = {
+      id: uid(),
+      date: partnerForm.date,
+      type: partnerForm.type,
+      vehicle: partnerForm.vehicle,
+      category: partnerForm.type === 'gasto' ? partnerForm.category : 'entregas',
+      amount,
+      kilometers: Number(partnerForm.kilometers) || 0,
+      description: partnerForm.description.trim() || (partnerForm.type === 'ganho' ? 'Entregas' : PARTNER_EXPENSE_CATEGORIES.find((c) => c.id === partnerForm.category).label),
+    };
+    const updated = [...partnerEntries, item];
+    setPartnerEntries(updated);
+    persist('partnerEntries', updated);
+    logActivity(`registrou ${partnerForm.type === 'ganho' ? 'ganho' : 'gasto'} de ${formatBRL(amount)} no painel do parceiro`);
+    setPartnerForm({ ...emptyPartnerForm(), vehicle: partnerForm.vehicle });
+    showToast('Registro salvo');
+  };
+  const handleDeletePartnerEntry = (id) => {
+    const updated = partnerEntries.filter((item) => item.id !== id);
+    setPartnerEntries(updated);
+    persist('partnerEntries', updated);
+  };
+
   // ---- Handlers: cartões de crédito ----
   const handleSaveCard = () => {
     setCardError('');
@@ -863,8 +905,8 @@ function FinanceDashboard() {
 
   const handleResetData = () => {
     if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000); return; }
-    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]); setCategoryBudgets({}); setActivityLog([]);
-    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []); persist('categoryBudgets', {}); persist('activityLog', []);
+    setEntries([]); setPartnerEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]); setCategoryBudgets({}); setActivityLog([]);
+    persist('entries', []); persist('partnerEntries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []); persist('categoryBudgets', {}); persist('activityLog', []);
     setResetArmed(false); showToast('Dados redefinidos');
   };
 
@@ -876,7 +918,7 @@ function FinanceDashboard() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
   const handleExportJSON = () => {
-    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }, null, 2), 'application/json');
+    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, partnerEntries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }, null, 2), 'application/json');
     showToast('Backup .json baixado');
   };
   const handleExportCSV = () => {
@@ -980,6 +1022,7 @@ function FinanceDashboard() {
         const data = JSON.parse(reader.result);
         if (data.income) { setIncome(data.income); persist('income', data.income); }
         if (data.entries) { setEntries(data.entries); persist('entries', data.entries); }
+        if (data.partnerEntries) { setPartnerEntries(data.partnerEntries); persist('partnerEntries', data.partnerEntries); }
         if (data.goals) { setGoals(data.goals); persist('goals', data.goals); }
         if (data.budgetRule) { setBudgetRule(data.budgetRule); persist('budgetRule', data.budgetRule); }
         if (data.cards) { setCards(data.cards); persist('cards', data.cards); }
@@ -1027,6 +1070,15 @@ function FinanceDashboard() {
   const previousMonthTotal = useMemo(() => entries.filter((e) => monthKeyOf(e.date) === previousMonthKey).reduce((sum, e) => sum + Number(e.amount || 0), 0), [entries, previousMonthKey]);
   const currentMonthTotal = monthEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const reportIncome = totalIncome;
+  const partnerMonthEntries = useMemo(() => partnerEntries.filter((e) => monthKeyOf(e.date) === selectedMonth), [partnerEntries, selectedMonth]);
+  const partnerGains = partnerMonthEntries.filter((e) => e.type === 'ganho');
+  const partnerExpenses = partnerMonthEntries.filter((e) => e.type === 'gasto');
+  const partnerGainsTotal = partnerGains.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const partnerExpensesTotal = partnerExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const partnerNet = partnerGainsTotal - partnerExpensesTotal;
+  const partnerKilometers = partnerMonthEntries.reduce((sum, e) => sum + Number(e.kilometers || 0), 0);
+  const partnerExpenseAverage = partnerExpenses.length ? partnerExpensesTotal / partnerExpenses.length : 0;
+  const partnerGainAverage = partnerGains.length ? partnerGainsTotal / partnerGains.length : 0;
 
   if (!sync.authReady) return <SessionLoading />;
   if (!sync.user) return <AuthPanel sync={sync} configText={fbConfigText} setConfigText={setFbConfigText} code={fbCodeInput} setCode={setFbCodeInput} onConnected={() => showToast('Conectado ao banco de dados')} />;
@@ -1330,6 +1382,54 @@ function FinanceDashboard() {
               {filteredExpenses.length > expensesVisibleCount && (
                 <div className="p-3 text-center"><button onClick={() => setExpensesVisibleCount((n) => n + 25)} className="text-xs" style={{ color: C.pine }}>Carregar mais ({filteredExpenses.length - expensesVisibleCount} restantes)</button></div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'partner' && (
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between gap-3">
+              <div><h2 className="text-lg font-serif font-semibold">Entregas e veículo</h2><p className="text-sm" style={{ color: C.inkMuted }}>Acompanhe os ganhos das entregas e os custos da sua moto ou carro.</p></div>
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <StatCard label="Ganhos" value={formatBRL(partnerGainsTotal)} sub={`${partnerGains.length} registro(s)`} accent={C.pine} />
+              <StatCard label="Gastos" value={formatBRL(partnerExpensesTotal)} sub={`${partnerExpenses.length} registro(s)`} accent={C.alert} />
+              <StatCard label="Líquido" value={formatBRL(partnerNet)} sub="Ganhos − gastos" accent={partnerNet < 0 ? C.alert : C.pine} />
+              <StatCard label="Média de ganho" value={formatBRL(partnerGainAverage)} sub="Por registro" />
+              <StatCard label="Média de gasto" value={formatBRL(partnerExpenseAverage)} sub={partnerKilometers ? `${partnerKilometers.toLocaleString('pt-BR')} km informados` : 'Informe a quilometragem'} />
+            </div>
+
+            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-4">Novo registro</h3>
+              <div className="flex gap-2 mb-4">
+                {[{ id: 'ganho', label: 'Ganho de entrega' }, { id: 'gasto', label: 'Gasto do veículo' }].map((type) => {
+                  const active = partnerForm.type === type.id;
+                  return <button key={type.id} type="button" onClick={() => setPartnerForm({ ...partnerForm, type: type.id })} className="rounded-lg px-3 py-2 text-sm" style={{ background: active ? (type.id === 'ganho' ? C.pine : C.alert) : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? (type.id === 'ganho' ? C.pine : C.alert) : C.border}` }}>{type.label}</button>;
+                })}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" min="0" step="0.01" placeholder="0,00" value={partnerForm.amount} onChange={(e) => setPartnerForm({ ...partnerForm, amount: e.target.value })} /></div>
+                <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={partnerForm.date} onChange={(e) => setPartnerForm({ ...partnerForm, date: e.target.value })} /></div>
+                <div><FieldLabel>Veículo</FieldLabel><Select value={partnerForm.vehicle} onChange={(e) => setPartnerForm({ ...partnerForm, vehicle: e.target.value })}><option value="moto">Moto</option><option value="carro">Carro</option></Select></div>
+                <div><FieldLabel>Quilometragem (km)</FieldLabel><TextInput type="number" min="0" step="1" placeholder="Opcional" value={partnerForm.kilometers} onChange={(e) => setPartnerForm({ ...partnerForm, kilometers: e.target.value })} /></div>
+              </div>
+              {partnerForm.type === 'gasto' && <div className="mt-3 max-w-sm"><FieldLabel>Categoria do gasto</FieldLabel><Select value={partnerForm.category} onChange={(e) => setPartnerForm({ ...partnerForm, category: e.target.value })}>{PARTNER_EXPENSE_CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</Select></div>}
+              <div className="mt-3"><FieldLabel>Descrição (opcional)</FieldLabel><TextInput type="text" placeholder={partnerForm.type === 'ganho' ? 'Ex.: 18 entregas no turno' : 'Ex.: Troca de óleo'} value={partnerForm.description} onChange={(e) => setPartnerForm({ ...partnerForm, description: e.target.value })} /></div>
+              {partnerError && <p className="text-sm mt-3" style={{ color: C.alert }}>{partnerError}</p>}
+              <div className="mt-4"><PrimaryButton onClick={handleAddPartnerEntry}>Salvar registro</PrimaryButton></div>
+            </div>
+
+            <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <div className="px-4 py-3 border-b" style={{ borderColor: C.border }}><h3 className="text-sm font-medium">Lançamentos de {monthLabel(selectedMonth)}</h3></div>
+              {partnerMonthEntries.length === 0 ? <p className="p-6 text-sm text-center" style={{ color: C.inkMuted }}>Nenhum registro neste mês.</p> : <div className="divide-y" style={{ borderColor: C.border }}>
+                {[...partnerMonthEntries].sort((a, b) => (a.date < b.date ? 1 : -1)).map((item) => <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="rounded-full p-2" style={{ background: item.type === 'ganho' ? C.pineLight : C.alertLight }}><Icon name={item.type === 'ganho' ? 'trending' : 'car'} size={14} style={{ color: item.type === 'ganho' ? C.pine : C.alert }} /></div>
+                  <div className="flex-1 min-w-0"><p className="text-sm truncate" style={{ color: C.ink }}>{item.description}</p><p className="text-xs" style={{ color: C.inkMuted }}>{item.date} · {item.vehicle === 'moto' ? 'Moto' : 'Carro'}{item.kilometers ? ` · ${item.kilometers} km` : ''}{item.type === 'gasto' ? ` · ${PARTNER_EXPENSE_CATEGORIES.find((c) => c.id === item.category)?.label || 'Outros'}` : ''}</p></div>
+                  <span className="text-sm tabular-nums" style={{ color: item.type === 'ganho' ? C.pine : C.alert }}>{item.type === 'ganho' ? '+' : '-'} {formatBRL(item.amount)}</span>
+                  <button onClick={() => handleDeletePartnerEntry(item.id)}><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                </div>)}
+              </div>}
             </div>
           </div>
         )}
