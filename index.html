@@ -78,6 +78,8 @@ function Icon({ name, size = 16, style, className }) {
     zap: <><path d="M13 2 3 14h8l-1 8 11-14h-8z"/></>,
     calendar: <><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></>,
     paw: <><circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><circle cx="19.5" cy="13.5" r="1.7"/><path d="M12 12.5c-3.2 0-6 2-6 4.6 0 1.6 1.4 2.7 3 2.4 1-.2 2-.7 3-.7s2 .5 3 .7c1.6.3 3-.8 3-2.4 0-2.6-2.8-4.6-6-4.6z"/></>,
+    leaf: <><path d="M5 21c8-1 13-6 14-15-9 1-14 6-15 15z"/><path d="M6 20c2.5-3 5-6.5 13-14"/></>,
+    receipt: <><path d="M6 3h12v18l-2-1.3L14 21l-2-1.3L10 21l-2-1.3L6 21V3z"/><path d="M9 8h6M9 12h6M9 16h4"/></>,
   };
   return <svg {...p}>{paths[name] || null}</svg>;
 }
@@ -95,6 +97,7 @@ const CATEGORIES = [
   { id: 'educacao', label: 'Educação', icon: 'grad', budgetType: 'desejo', color: '#4E7A6B' },
   { id: 'investimentos', label: 'Investimentos', icon: 'trending', budgetType: 'poupanca', color: '#2F7A54' },
   { id: 'pet', label: 'Pet', icon: 'paw', budgetType: 'necessidade', color: '#8A5A44' },
+  { id: 'jardinagem', label: 'Jardinagem', icon: 'leaf', budgetType: 'necessidade', color: '#4C7A3D' },
   { id: 'outros', label: 'Outros', icon: 'more', budgetType: 'desejo', color: '#9AA39A' },
 ];
 const catById = (id) => CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
@@ -109,6 +112,7 @@ const GOAL_CATEGORIES = ['Reserva de emergência', 'Investimento', 'Compra plane
 const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const NAV = [
   { id: 'dashboard', label: 'Visão geral', icon: 'piechart' },
+  { id: 'expenses', label: 'Gastos', icon: 'receipt' },
   { id: 'report', label: 'Relatório mensal', icon: 'filetext' },
   { id: 'income', label: 'Renda', icon: 'landmark' },
   { id: 'cards', label: 'Cartões', icon: 'creditcard' },
@@ -495,6 +499,9 @@ function FinanceDashboard() {
   const [cardForm, setCardForm] = useState(emptyCardForm());
   const [cardError, setCardError] = useState('');
   const [editingCardId, setEditingCardId] = useState(null);
+  const [viewingCardId, setViewingCardId] = useState(null);
+  const [expenseFilter, setExpenseFilter] = useState({ person: 'todos', category: 'todas', paymentMethod: 'todas', cardId: 'todos', search: '' });
+  const [expensesShowAllMonths, setExpensesShowAllMonths] = useState(false);
 
   const [entryForm, setEntryForm] = useState(emptyEntryForm());
   const [entryError, setEntryError] = useState('');
@@ -782,6 +789,29 @@ function FinanceDashboard() {
     return [...list].sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [entries, monthEntries, showAllMonths, historyFilter]);
 
+  // ---- Painel "Gastos": lista detalhada e filtrável de todos os lançamentos ----
+  const filteredExpenses = useMemo(() => {
+    let list = expensesShowAllMonths ? entries : monthEntries;
+    if (expenseFilter.person !== 'todos') list = list.filter((e) => e.person === expenseFilter.person);
+    if (expenseFilter.category !== 'todas') list = list.filter((e) => e.category === expenseFilter.category);
+    if (expenseFilter.paymentMethod !== 'todas') list = list.filter((e) => e.paymentMethod === expenseFilter.paymentMethod);
+    if (expenseFilter.cardId !== 'todos') list = list.filter((e) => e.cardId === expenseFilter.cardId);
+    if (expenseFilter.search.trim()) {
+      const q = expenseFilter.search.trim().toLowerCase();
+      list = list.filter((e) => e.description.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [entries, monthEntries, expensesShowAllMonths, expenseFilter]);
+  const filteredExpensesTotal = filteredExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+
+  // ---- Página de detalhe: compras lançadas em um cartão específico ----
+  const viewingCard = cards.find((c) => c.id === viewingCardId) || null;
+  const cardPurchases = useMemo(() => {
+    if (!viewingCardId) return [];
+    return entries.filter((e) => e.cardId === viewingCardId).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [entries, viewingCardId]);
+  const cardPurchasesTotal = cardPurchases.reduce((s, e) => s + Number(e.amount || 0), 0);
+
   const previousMonthKey = useMemo(() => addMonthsToDate(`${selectedMonth}-01`, -1).slice(0, 7), [selectedMonth]);
   const previousMonthTotal = useMemo(() => entries.filter((e) => monthKeyOf(e.date) === previousMonthKey).reduce((sum, e) => sum + Number(e.amount || 0), 0), [entries, previousMonthKey]);
   const currentMonthTotal = monthEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -970,6 +1000,57 @@ function FinanceDashboard() {
           </div>
         )}
 
+        {/* ---------------- GASTOS ---------------- */}
+        {activeTab === 'expenses' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-serif font-semibold mr-auto">Gastos detalhados</h2>
+              <button onClick={() => setExpensesShowAllMonths((v) => !v)} className="text-xs rounded-full px-3 py-1.5" style={{ background: expensesShowAllMonths ? C.pine : C.panel, color: expensesShowAllMonths ? '#fff' : C.inkMuted, border: `1px solid ${expensesShowAllMonths ? C.pine : C.border}` }}>{expensesShowAllMonths ? 'Todos os meses' : monthLabel(selectedMonth)}</button>
+              <SecondaryButton onClick={handleExportCSV}><span className="flex items-center gap-1.5"><Icon name="download" size={14} />Exportar CSV</span></SecondaryButton>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard label="Total filtrado" value={formatBRL(filteredExpensesTotal)} accent={C.alert} />
+              <StatCard label="Nº de lançamentos" value={String(filteredExpenses.length)} />
+              <StatCard label="Ticket médio" value={formatBRL(filteredExpenses.length ? filteredExpensesTotal / filteredExpenses.length : 0)} />
+            </div>
+
+            <div className="rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <div><FieldLabel>Buscar</FieldLabel><TextInput type="text" placeholder="Descrição…" value={expenseFilter.search} onChange={(e) => setExpenseFilter({ ...expenseFilter, search: e.target.value })} /></div>
+              <div><FieldLabel>Pessoa</FieldLabel><Select value={expenseFilter.person} onChange={(e) => setExpenseFilter({ ...expenseFilter, person: e.target.value })}><option value="todos">Todas</option>{personNames.map((p) => <option key={p} value={p}>{p}</option>)}</Select></div>
+              <div><FieldLabel>Categoria</FieldLabel><Select value={expenseFilter.category} onChange={(e) => setExpenseFilter({ ...expenseFilter, category: e.target.value })}><option value="todas">Todas</option>{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}</Select></div>
+              <div><FieldLabel>Pagamento</FieldLabel><Select value={expenseFilter.paymentMethod} onChange={(e) => setExpenseFilter({ ...expenseFilter, paymentMethod: e.target.value })}><option value="todas">Todas</option>{PAYMENT_METHODS.map((pm) => <option key={pm.id} value={pm.id}>{pm.label}</option>)}</Select></div>
+              <div><FieldLabel>Cartão</FieldLabel><Select value={expenseFilter.cardId} onChange={(e) => setExpenseFilter({ ...expenseFilter, cardId: e.target.value })}><option value="todos">Todos</option>{cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></div>
+            </div>
+
+            <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              {filteredExpenses.length === 0 ? <p className="text-sm p-6 text-center" style={{ color: C.inkMuted }}>Nenhum gasto encontrado com esses filtros.</p> : (
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {filteredExpenses.map((e) => {
+                    const cat = catById(e.category);
+                    const card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
+                    return (
+                      <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                        <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                          <p className="text-xs" style={{ color: C.inkMuted }}>
+                            {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>} · {BUDGET_TYPES.find((bt) => bt.id === e.budgetType)?.label}
+                            {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
+                            {!card && <> · {e.paymentMethod === 'credito' ? 'Crédito' : 'Dinheiro/Pix/Débito'}</>}
+                          </p>
+                        </div>
+                        <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'report' && (
           <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-serif font-semibold">Relatório mensal</h2><p className="text-sm" style={{ color: C.inkMuted }}>{monthLabel(selectedMonth)} · comparação com {monthLabel(previousMonthKey)}</p></div><div className="flex gap-2"><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} /><SecondaryButton onClick={() => window.print()}><Icon name="download" size={14} /> Imprimir / PDF</SecondaryButton></div></div>
@@ -1062,7 +1143,48 @@ function FinanceDashboard() {
             )}
           </div>
         )}
-        {activeTab === 'cards' && (
+        {activeTab === 'cards' && viewingCard && (
+          <div className="flex flex-col gap-4">
+            <button onClick={() => setViewingCardId(null)} className="text-sm flex items-center gap-1.5 w-fit" style={{ color: C.pine }}>
+              <Icon name="x" size={14} /> Voltar para Cartões
+            </button>
+            <div className="rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `4px solid ${viewingCard.color}` }}>
+              <div>
+                <h2 className="text-xl font-serif font-semibold flex items-center gap-2"><Icon name="creditcard" size={18} style={{ color: viewingCard.color }} />{viewingCard.name}</h2>
+                <p className="text-xs mt-1" style={{ color: C.inkMuted }}>Fecha dia {viewingCard.closingDay} · vence dia {viewingCard.dueDay}{viewingCard.limit > 0 ? ` · limite ${formatBRL(viewingCard.limit)}` : ''}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs" style={{ color: C.inkMuted }}>Total lançado neste cartão (todo o período)</span>
+                <div className="text-2xl font-serif font-semibold tabular-nums">{formatBRL(cardPurchasesTotal)}</div>
+                <span className="text-xs" style={{ color: C.inkMuted }}>{cardPurchases.length} compra{cardPurchases.length !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+            <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              {cardPurchases.length === 0 ? (
+                <p className="text-sm p-6 text-center" style={{ color: C.inkMuted }}>Nenhuma compra lançada neste cartão ainda.</p>
+              ) : (
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {cardPurchases.map((e) => {
+                    const cat = catById(e.category);
+                    return (
+                      <div key={e.id} className="flex items-center gap-3 px-4 py-3">
+                        <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                          <p className="text-xs" style={{ color: C.inkMuted }}>{e.date} · {e.person} · {cat.label}{e.installments > 1 ? ` · parcela ${e.installmentNumber}/${e.installments}` : ''}</p>
+                        </div>
+                        <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'cards' && !viewingCard && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-2 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
               <h2 className="text-lg font-serif font-semibold mb-4">{editingCardId ? 'Editar cartão' : 'Novo cartão'}</h2>
@@ -1091,7 +1213,7 @@ function FinanceDashboard() {
               {cards.length === 0 ? (
                 <div className="rounded-xl p-6 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.inkMuted }}>Nenhum cartão cadastrado ainda. Adicione um para começar a lançar gastos parcelados no crédito.</div>
               ) : cardInvoices.map((c) => (
-                <div key={c.id} className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `4px solid ${c.color}` }}>
+                <div key={c.id} onClick={() => setViewingCardId(c.id)} className="rounded-xl p-5 cursor-pointer transition-shadow hover:shadow-md" style={{ background: C.panel, border: `1px solid ${C.border}`, borderLeft: `4px solid ${c.color}` }}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-base font-serif font-semibold flex items-center gap-2"><Icon name="creditcard" size={16} style={{ color: c.color }} />{c.name}</h3>
@@ -1102,9 +1224,10 @@ function FinanceDashboard() {
                       <span className="text-xs" style={{ color: C.inkMuted }}>fatura do mês</span>
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-3">
-                    <button onClick={() => handleEditCard(c)} className="text-xs underline" style={{ color: C.pine }}>Editar</button>
-                    <button onClick={() => handleDeleteCard(c.id)} className="text-xs underline" style={{ color: C.alert }}>Excluir</button>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="text-xs flex items-center gap-1" style={{ color: C.pine }}><Icon name="history" size={12} />Ver compras lançadas</span>
+                    <button onClick={(ev) => { ev.stopPropagation(); handleEditCard(c); }} className="text-xs underline" style={{ color: C.pine }}>Editar</button>
+                    <button onClick={(ev) => { ev.stopPropagation(); handleDeleteCard(c.id); }} className="text-xs underline" style={{ color: C.alert }}>Excluir</button>
                   </div>
                 </div>
               ))}
