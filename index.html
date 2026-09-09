@@ -4,6 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Finanças a Dois</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1F4D3A">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -13,6 +17,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   html, body { margin: 0; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   .font-serif { font-family: 'Source Serif 4', Georgia, serif; }
@@ -25,6 +30,19 @@
   .login-panel { box-shadow: 0 24px 70px rgba(28,38,32,.12); }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #D8D2C0; border-radius: 4px; }
+  [data-theme="dark"] body { background: #10140D; }
+  [data-theme="dark"] .app-shell { background: radial-gradient(circle at 88% 0%, rgba(76,154,115,.10), transparent 26rem), linear-gradient(135deg, #12160F 0%, #10140D 100%); }
+  [data-theme="dark"] .brand-mark { background: #2E5C43; color: #E9D9AE; }
+  [data-theme="dark"] .nav-strip { background: rgba(27,34,28,.7); border-color: rgba(51,62,52,.9); }
+  [data-theme="dark"] .login-panel { box-shadow: 0 24px 70px rgba(0,0,0,.55); }
+  [data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3A463C; }
+  .tab-fade { animation: tabFadeIn .18s ease-out; }
+  @keyframes tabFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .bottom-nav-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .mobile-nav-bottom { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; padding: env(safe-area-inset-bottom, 8px) 8px 8px; background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(10px); border-top: 1px solid #E3DECF; }
+  [data-theme="dark"] .mobile-nav-bottom { background: rgba(27, 34, 28, 0.98); border-top-color: #333E34; }
+  @media (min-width: 768px) { .mobile-nav-bottom { display: none; } }
+  button, .nav-strip button { transition: background-color .15s ease, color .15s ease, transform .1s ease; }
 </style>
 </head>
 <body>
@@ -36,12 +54,20 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 // ============================================================
 // Design tokens (mantidos do painel original)
 // ============================================================
-const C = {
+const LIGHT_THEME = {
   bg: '#F5F3ED', panel: '#FFFFFF', panelAlt: '#FAF9F4', border: '#E3DECF',
   ink: '#1C2620', inkMuted: '#6B6F63', pine: '#1F4D3A', pineLight: '#E7EFE9',
   gold: '#B8863E', goldLight: '#F3E8D3', alert: '#B3492E', alertLight: '#F7E4DE',
   personA: '#1F4D3A', personB: '#3B5B74',
 };
+const DARK_THEME = {
+  bg: '#12160F', panel: '#1B221C', panelAlt: '#212A22', border: '#333E34',
+  ink: '#EDEFE9', inkMuted: '#9AA396', pine: '#4C9A73', pineLight: '#22322A',
+  gold: '#D9A968', goldLight: '#3A2F1A', alert: '#E28568', alertLight: '#3A211B',
+  personA: '#4C9A73', personB: '#6FA0C2',
+};
+const C = { ...LIGHT_THEME };
+function applyTheme(mode) { Object.assign(C, mode === 'dark' ? DARK_THEME : LIGHT_THEME); }
 
 // ============================================================
 // Ícones (SVG leve, sem dependência externa)
@@ -80,6 +106,8 @@ function Icon({ name, size = 16, style, className }) {
     paw: <><circle cx="7" cy="9" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="9" r="1.8"/><circle cx="19.5" cy="13.5" r="1.7"/><path d="M12 12.5c-3.2 0-6 2-6 4.6 0 1.6 1.4 2.7 3 2.4 1-.2 2-.7 3-.7s2 .5 3 .7c1.6.3 3-.8 3-2.4 0-2.6-2.8-4.6-6-4.6z"/></>,
     leaf: <><path d="M5 21c8-1 13-6 14-15-9 1-14 6-15 15z"/><path d="M6 20c2.5-3 5-6.5 13-14"/></>,
     receipt: <><path d="M6 3h12v18l-2-1.3L14 21l-2-1.3L10 21l-2-1.3L6 21V3z"/><path d="M9 8h6M9 12h6M9 16h4"/></>,
+    moon: <><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
   };
   return <svg {...p}>{paths[name] || null}</svg>;
 }
@@ -118,9 +146,10 @@ const NAV = [
   { id: 'cards', label: 'Cartões', icon: 'creditcard' },
   { id: 'goals', label: 'Metas', icon: 'piggy' },
   { id: 'history', label: 'Histórico', icon: 'history' },
+  { id: 'activity', label: 'Atividades', icon: 'zap' },
   { id: 'config', label: 'Sincronização', icon: 'cloud' },
 ];
-const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards', 'cashMovements'];
+const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards', 'cashMovements', 'categoryBudgets', 'activityLog'];
 const PAYMENT_METHODS = [
   { id: 'debito', label: 'Dinheiro / Pix / Débito' },
   { id: 'credito', label: 'Cartão de crédito' },
@@ -145,7 +174,7 @@ const last6MonthKeys = (endKey) => {
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const defaultIncome = { p1: { name: 'Pessoa 1', amount: 0 }, p2: { name: 'Pessoa 2', amount: 0 } };
 const defaultBudgetRule = { necessidade: 50, desejo: 30, poupanca: 20 };
-const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '' });
+const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '', receipt: '' });
 const addMonthsToDate = (iso, n) => {
   const [y, m, d] = iso.split('-').map(Number);
   let mm = m - 1 + n, yy = y;
@@ -502,6 +531,20 @@ function FinanceDashboard() {
   const [viewingCardId, setViewingCardId] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState({ person: 'todos', category: 'todas', paymentMethod: 'todas', cardId: 'todos', search: '' });
   const [expensesShowAllMonths, setExpensesShowAllMonths] = useState(false);
+  const [showActivityTab, setShowActivityTab] = useState(false);
+  const [theme, setTheme] = useState(() => LocalStore.get('theme') || 'light');
+  const [categoryBudgets, setCategoryBudgets] = useState(() => LocalStore.get('categoryBudgets') || {});
+  const [activityLog, setActivityLog] = useState(() => LocalStore.get('activityLog') || []);
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(25);
+  const [expensesVisibleCount, setExpensesVisibleCount] = useState(25);
+  applyTheme(theme);
+  useEffect(() => {
+    LocalStore.set('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+  useEffect(() => { setExpensesVisibleCount(25); }, [expenseFilter, expensesShowAllMonths, selectedMonth]);
+  useEffect(() => { setHistoryVisibleCount(25); }, [historyFilter, showAllMonths, selectedMonth]);
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
   const [entryForm, setEntryForm] = useState(emptyEntryForm());
   const [entryError, setEntryError] = useState('');
@@ -526,6 +569,8 @@ function FinanceDashboard() {
     if (data.budgetRule !== undefined) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
     if (data.cards !== undefined) { setCards(data.cards); LocalStore.set('cards', data.cards); }
     if (data.cashMovements !== undefined) { setCashMovements(data.cashMovements); LocalStore.set('cashMovements', data.cashMovements); }
+    if (data.categoryBudgets !== undefined) { setCategoryBudgets(data.categoryBudgets); LocalStore.set('categoryBudgets', data.categoryBudgets); }
+    if (data.activityLog !== undefined) { setActivityLog(data.activityLog); LocalStore.set('activityLog', data.activityLog); }
     if (!isLocalEcho) {
       showToast(data.updatedBy && syncUserId() !== data.updatedBy ? 'Seu parceiro lançou um gasto' : 'Dados atualizados');
       if (data.updatedBy && syncUserId() !== data.updatedBy && 'Notification' in window && Notification.permission === 'granted') new Notification('Novo lançamento', { body: 'Seu parceiro atualizou o painel financeiro.' });
@@ -535,6 +580,17 @@ function FinanceDashboard() {
   const syncUserId = () => { try { return firebase.auth().currentUser && firebase.auth().currentUser.uid; } catch (e) { return null; } };
 
   const sync = useFirestoreSync(applyRemoteData);
+
+  // ---- Log de atividades (auditoria leve: quem fez o quê e quando) ----
+  const logActivity = useCallback((action) => {
+    const entry = { id: uid(), action, who: (sync.user && sync.user.email) || 'você', at: new Date().toISOString() };
+    setActivityLog((prev) => {
+      const updated = [entry, ...prev].slice(0, 50);
+      LocalStore.set('activityLog', updated);
+      if (sync.connected) sync.pushKey('activityLog', updated).catch(() => {});
+      return updated;
+    });
+  }, [sync]);
 
   const requestNotifications = async () => {
     if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
@@ -556,7 +612,7 @@ function FinanceDashboard() {
       showToast('Conectado ao banco de dados');
       // envia o estado atual como primeira sincronização, caso o documento esteja vazio
       SYNC_KEYS.forEach((k) => {
-        const val = { income, entries, goals, budgetRule, cards, cashMovements }[k];
+        const val = { income, entries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }[k];
         sync.pushKey(k, val).catch(() => {});
       });
     } catch (e) {
@@ -587,11 +643,41 @@ function FinanceDashboard() {
     return CATEGORIES.map((c) => ({ id: c.id, name: c.label, value: map[c.id] || 0, color: c.color })).filter((c) => c.value > 0);
   }, [monthEntries]);
   const totalCategorySum = totalsByCategory.reduce((s, c) => s + c.value, 0);
+  const categorySpendMap = useMemo(() => {
+    const map = {};
+    monthEntries.forEach((e) => { map[e.category] = (map[e.category] || 0) + Number(e.amount || 0); });
+    return map;
+  }, [monthEntries]);
+  const handleSetCategoryBudget = (catId, value) => {
+    const updated = { ...categoryBudgets, [catId]: value === '' ? undefined : Number(value) };
+    if (updated[catId] === undefined) delete updated[catId];
+    setCategoryBudgets(updated); persist('categoryBudgets', updated);
+  };
+  const budgetAlerts = useMemo(() => Object.entries(categoryBudgets)
+    .filter(([, limit]) => Number(limit) > 0)
+    .map(([catId, limit]) => ({ cat: catById(catId), limit: Number(limit), spent: categorySpendMap[catId] || 0 }))
+    .filter((b) => b.spent > b.limit), [categoryBudgets, categorySpendMap]);
   const totalsByPerson = useMemo(() => {
     const map = {};
     monthEntries.forEach((e) => { map[e.person] = (map[e.person] || 0) + Number(e.amount || 0); });
     return map;
   }, [monthEntries]);
+  const [settlementMode, setSettlementMode] = useState('5050'); // '5050' | 'renda'
+  const settlement = useMemo(() => {
+    const p1Name = income.p1.name || 'Pessoa 1';
+    const p2Name = income.p2.name || 'Pessoa 2';
+    const relevant = monthEntries.filter((e) => e.budgetType !== 'poupanca');
+    const total = relevant.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const paidP1 = relevant.filter((e) => e.person === p1Name).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const paidP2 = relevant.filter((e) => e.person === p2Name).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const incomeP1 = Number(income.p1.amount) || 0, incomeP2 = Number(income.p2.amount) || 0;
+    const incomeTotal = incomeP1 + incomeP2;
+    const shareP1 = settlementMode === 'renda' && incomeTotal > 0 ? incomeP1 / incomeTotal : 0.5;
+    const shareP2 = settlementMode === 'renda' && incomeTotal > 0 ? incomeP2 / incomeTotal : 0.5;
+    const fairP1 = total * shareP1, fairP2 = total * shareP2;
+    const balanceP1 = paidP1 - fairP1;
+    return { p1Name, p2Name, total, paidP1, paidP2, fairP1, fairP2, balanceP1, shareP1, shareP2 };
+  }, [monthEntries, income, settlementMode]);
   const trendData = useMemo(() => {
     const keys = last6MonthKeys(selectedMonth);
     return keys.map((k) => {
@@ -645,10 +731,19 @@ function FinanceDashboard() {
     const updated = [...entries, ...newEntries];
     setEntries(updated); persist('entries', updated);
     setEntryForm({ ...emptyEntryForm(), person: entryForm.person });
-    showToast(newEntries.length > 1 ? `Lançamento salvo em ${newEntries.length}x` : 'Lançamento salvo');
+    logActivity(`lançou ${formatBRL(amount)} em ${catById(form.category).label}${form.description ? ` (${form.description})` : ''}`);
+
+    let msg = newEntries.length > 1 ? `Lançamento salvo em ${newEntries.length}x` : 'Lançamento salvo';
+    const limit = Number(categoryBudgets[form.category]) || 0;
+    if (limit > 0) {
+      const monthKey = monthKeyOf(form.date);
+      const spentNow = updated.filter((e) => e.category === form.category && monthKeyOf(e.date) === monthKey).reduce((s, e) => s + Number(e.amount || 0), 0);
+      if (spentNow > limit) msg = `⚠️ ${catById(form.category).label} passou do orçamento: ${formatBRL(spentNow)} de ${formatBRL(limit)}`;
+    }
+    showToast(msg);
     setQuickAddOpen(false);
   };
-  const handleDeleteEntry = (id) => { const updated = entries.filter((e) => e.id !== id); setEntries(updated); persist('entries', updated); };
+  const handleDeleteEntry = (id) => { const target = entries.find((e) => e.id === id); const updated = entries.filter((e) => e.id !== id); setEntries(updated); persist('entries', updated); if (target) logActivity(`removeu o lançamento "${target.description}" (${formatBRL(target.amount)})`); };
 
   // ---- Handlers: cartões de crédito ----
   const handleSaveCard = () => {
@@ -685,6 +780,32 @@ function FinanceDashboard() {
   }, [cards, entries, selectedMonth]);
   const totalCardInvoices = cardInvoices.reduce((s, c) => s + c.spent, 0);
   const nextDueCard = useMemo(() => cardInvoices.filter((c) => c.spent > 0).sort((a, b) => a.daysToDue - b.daysToDue)[0], [cardInvoices]);
+
+  // ---- Avisa ao abrir o app sobre faturas de cartão vencendo em breve ----
+  useEffect(() => {
+    if (!sync.user || cardInvoices.length === 0 || !sync.authReady) return;
+    const dueSoon = cardInvoices.filter((c) => c.spent > 0 && c.daysToDue <= 3);
+    if (dueSoon.length === 0) return;
+    const hasShown = LocalStore.get('invoiceNotificationShown') === 'true';
+    if (!hasShown) {
+      dueSoon.forEach((c) => {
+        const msg = `Fatura do ${c.name} vence em ${c.daysToDue} dia(s) · ${formatBRL(c.spent)}`;
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('💳 Fatura próxima do vencimento', { 
+            body: msg, 
+            icon: './icon-192.png', 
+            badge: './icon-192.png',
+            tag: 'invoice-alert'
+          });
+        } else {
+          showToast(msg);
+        }
+      });
+      LocalStore.set('invoiceNotificationShown', 'true');
+      setTimeout(() => LocalStore.set('invoiceNotificationShown', 'false'), 86400000); // Reset após 24h
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardInvoices, sync.user, sync.authReady]);
 
   // ---- Gasto com pets no mês selecionado ----
   const petSpentThisMonth = useMemo(() =>
@@ -741,8 +862,8 @@ function FinanceDashboard() {
 
   const handleResetData = () => {
     if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000); return; }
-    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]);
-    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []);
+    setEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]); setCategoryBudgets({}); setActivityLog([]);
+    persist('entries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []); persist('categoryBudgets', {}); persist('activityLog', []);
     setResetArmed(false); showToast('Dados redefinidos');
   };
 
@@ -754,7 +875,7 @@ function FinanceDashboard() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
   const handleExportJSON = () => {
-    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule, cards, cashMovements }, null, 2), 'application/json');
+    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }, null, 2), 'application/json');
     showToast('Backup .json baixado');
   };
   const handleExportCSV = () => {
@@ -763,6 +884,93 @@ function FinanceDashboard() {
     const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     downloadFile('lancamentos.csv', '\ufeff' + csv, 'text/csv;charset=utf-8');
     showToast('Planilha .csv baixada — pode abrir no Google Sheets ou Excel');
+  };
+  const handleDownloadReportPDF = () => {
+    if (!window.jspdf) { showToast('Não foi possível carregar o gerador de PDF. Verifique sua conexão.'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 15;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+    doc.text('📊 Relatório Mensal — Finanças a Dois', 14, y); y += 10;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(`Mês: ${monthLabel(selectedMonth)} · Período anterior: ${monthLabel(previousMonthKey)}`, 14, y); y += 1;
+    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, y); y += 8;
+
+    // Linha de separação
+    doc.setDrawColor(31, 77, 58);
+    doc.line(14, y, 196, y); y += 5;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('RESUMO FINANCEIRO', 14, y); y += 7;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    const summaryData = [
+      [`💰 Renda conjunta`, formatBRL(reportIncome)],
+      [`📉 Total gasto (este mês)`, formatBRL(currentMonthTotal)],
+      [`📈 Mês anterior`, formatBRL(previousMonthTotal)],
+      [`✨ Saldo (Renda - Gastos)`, formatBRL(reportIncome - currentMonthTotal)],
+      [`📊 Taxa de poupança`, `${savingsRate.toFixed(1)}%`],
+    ];
+    summaryData.forEach(([label, val]) => { 
+      doc.text(`${label}: ${val}`, 14, y); y += 6; 
+    });
+    y += 2;
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GASTOS POR CATEGORIA', 14, y); y += 7;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    CATEGORIES.forEach((category) => {
+      const value = monthEntries.filter((e) => e.category === category.id).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      if (value > 0) { 
+        doc.text(`  • ${category.label}: ${formatBRL(value)}`, 14, y); 
+        y += 5; 
+        if (y > 265) { doc.addPage(); y = 20; } 
+      }
+    });
+    y += 2;
+
+    // Gastos por pessoa
+    if (Object.keys(totalsByPerson).length > 0) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GASTOS POR PESSOA', 14, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      Object.entries(totalsByPerson).forEach(([person, value]) => {
+        if (value > 0) {
+          doc.text(`  • ${person}: ${formatBRL(value)}`, 14, y); 
+          y += 5; 
+        }
+      });
+      y += 2;
+    }
+
+    // Seção de acerto de contas
+    if (settlement.paidP1 > 0 || settlement.paidP2 > 0) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('ACERTO DE CONTAS (50/50)', 14, y); y += 7;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.text(`${settlement.p1Name} pagou: ${formatBRL(settlement.paidP1)} (parte justa: ${formatBRL(settlement.fairP1)})`, 14, y); y += 5;
+      doc.text(`${settlement.p2Name} pagou: ${formatBRL(settlement.paidP2)} (parte justa: ${formatBRL(settlement.fairP2)})`, 14, y); y += 5;
+      
+      if (Math.abs(settlement.balanceP1) < 1) {
+        doc.setTextColor(31, 77, 58);
+        doc.setFont('helvetica', 'bold');
+        doc.text('✓ Contas equilibradas — ninguém deve nada!', 14, y); 
+        y += 6;
+      } else {
+        doc.setTextColor(179, 73, 46);
+        doc.setFont('helvetica', 'bold');
+        const debtor = settlement.balanceP1 > 0 ? settlement.p2Name : settlement.p1Name;
+        const creditor = settlement.balanceP1 > 0 ? settlement.p1Name : settlement.p2Name;
+        doc.text(`${debtor} deve ${formatBRL(Math.abs(settlement.balanceP1))} para ${creditor}`, 14, y);
+        y += 6;
+      }
+      doc.setTextColor(0);
+      y += 2;
+    }
+
+    // Linha de separação final
+    doc.setDrawColor(31, 77, 58);
+    doc.line(14, y, 196, y); y += 4;
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+    doc.text('Relatório gerado automaticamente pelo app Finanças a Dois', 14, y);
+
+    doc.save(`relatorio-${selectedMonth}.pdf`);
+    showToast('PDF do relatório baixado com sucesso!');
   };
   const handleImportJSON = (file) => {
     const reader = new FileReader();
@@ -775,6 +983,8 @@ function FinanceDashboard() {
         if (data.budgetRule) { setBudgetRule(data.budgetRule); persist('budgetRule', data.budgetRule); }
         if (data.cards) { setCards(data.cards); persist('cards', data.cards); }
         if (data.cashMovements) { setCashMovements(data.cashMovements); persist('cashMovements', data.cashMovements); }
+        if (data.categoryBudgets) { setCategoryBudgets(data.categoryBudgets); persist('categoryBudgets', data.categoryBudgets); }
+        if (data.activityLog) { setActivityLog(data.activityLog); persist('activityLog', data.activityLog); }
         showToast('Backup importado com sucesso');
       } catch (e) { showToast('Arquivo inválido'); }
     };
@@ -821,8 +1031,8 @@ function FinanceDashboard() {
   if (!sync.user) return <AuthPanel sync={sync} configText={fbConfigText} setConfigText={setFbConfigText} code={fbCodeInput} setCode={setFbCodeInput} onConnected={() => showToast('Conectado ao banco de dados')} />;
 
   return (
-    <div className="min-h-screen w-full font-sans app-shell" style={{ color: C.ink }}>
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10">
+    <div className="min-h-screen w-full font-sans app-shell bottom-nav-safe" style={{ color: C.ink }}>
+      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10 pb-24 md:pb-10">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -835,7 +1045,7 @@ function FinanceDashboard() {
           </button>
         </div>
 
-        {sync.user && <div className="flex justify-end gap-3 mb-4"><button onClick={requestNotifications} className="text-xs" style={{ color: C.pine }}>Ativar notificações</button><button onClick={sync.logout} className="text-xs" style={{ color: C.inkMuted }}>Sair</button></div>}
+        {sync.user && <div className="flex justify-end gap-3 mb-4"><button onClick={toggleTheme} className="text-xs flex items-center gap-1" style={{ color: C.pine }}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</button><button onClick={requestNotifications} className="text-xs" style={{ color: C.pine }}>Ativar notificações</button><button onClick={sync.logout} className="text-xs" style={{ color: C.inkMuted }}>Sair</button></div>}
 
         {/* Nav */}
         <div className={`nav-strip ${mobileNavOpen ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 mb-6`}>
@@ -860,6 +1070,15 @@ function FinanceDashboard() {
               <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
                 className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} />
             </div>
+
+            {budgetAlerts.length > 0 && (
+              <div className="rounded-xl p-4 flex flex-wrap items-center gap-2" style={{ background: C.alertLight, border: `1px solid ${C.alert}` }}>
+                <Icon name="alert" size={16} style={{ color: C.alert }} />
+                <span className="text-sm" style={{ color: C.alert }}>
+                  {budgetAlerts.map((b) => `${b.cat.label} passou do orçamento (${formatBRL(b.spent)} / ${formatBRL(b.limit)})`).join(' · ')}
+                </span>
+              </div>
+            )}
 
             <div className="rounded-xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4" style={{ background: C.pineLight, border: `1px solid ${C.border}` }}>
               <div>
@@ -969,6 +1188,33 @@ function FinanceDashboard() {
               </div>
             )}
 
+            {(settlement.paidP1 > 0 || settlement.paidP2 > 0) && (
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium" style={{ color: C.ink }}>Quem deve a quem (mês)</h3>
+                  <div className="flex gap-1 text-xs">
+                    <button onClick={() => setSettlementMode('5050')} className="rounded-full px-2.5 py-1" style={{ background: settlementMode === '5050' ? C.pine : C.panelAlt, color: settlementMode === '5050' ? '#fff' : C.inkMuted }}>50/50</button>
+                    <button onClick={() => setSettlementMode('renda')} className="rounded-full px-2.5 py-1" style={{ background: settlementMode === 'renda' ? C.pine : C.panelAlt, color: settlementMode === 'renda' ? '#fff' : C.inkMuted }}>Por renda</button>
+                  </div>
+                </div>
+                {Math.abs(settlement.balanceP1) < 1 ? (
+                  <p className="text-sm" style={{ color: C.pine }}>Contas equilibradas — ninguém deve nada este mês. 🎉</p>
+                ) : (
+                  <p className="text-base">
+                    <strong style={{ color: settlement.balanceP1 > 0 ? C.pine : C.alert }}>{settlement.balanceP1 > 0 ? settlement.p2Name : settlement.p1Name}</strong>
+                    {' '}deve{' '}
+                    <strong style={{ color: C.ink }}>{formatBRL(Math.abs(settlement.balanceP1))}</strong>
+                    {' '}para{' '}
+                    <strong style={{ color: settlement.balanceP1 > 0 ? C.pine : C.alert }}>{settlement.balanceP1 > 0 ? settlement.p1Name : settlement.p2Name}</strong>.
+                  </p>
+                )}
+                <p className="text-xs mt-2" style={{ color: C.inkMuted }}>
+                  {settlement.p1Name} pagou {formatBRL(settlement.paidP1)} (parte justa: {formatBRL(settlement.fairP1)}) · {settlement.p2Name} pagou {formatBRL(settlement.paidP2)} (parte justa: {formatBRL(settlement.fairP2)}).
+                  {settlementMode === 'renda' && ' Dividido proporcionalmente à renda de cada um.'}
+                </p>
+              </div>
+            )}
+
             <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
               <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Evolução — últimos 6 meses</h3>
               <div style={{ width: '100%' }}><TrendChart data={trendData} referenceValue={totalIncome} /></div>
@@ -1023,17 +1269,50 @@ function FinanceDashboard() {
               <div><FieldLabel>Cartão</FieldLabel><Select value={expenseFilter.cardId} onChange={(e) => setExpenseFilter({ ...expenseFilter, cardId: e.target.value })}><option value="todos">Todos</option>{cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></div>
             </div>
 
+            <details className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <summary className="px-4 py-3 text-sm font-medium cursor-pointer select-none" style={{ color: C.ink }}>Orçamento por categoria (mês atual)</summary>
+              <div className="px-4 pb-4 flex flex-col gap-3">
+                <p className="text-xs" style={{ color: C.inkMuted }}>Defina um teto mensal para cada categoria (opcional). Quando o gasto passar do valor, vocês recebem um aviso ao lançar.</p>
+                {CATEGORIES.map((c) => {
+                  const spent = categorySpendMap[c.id] || 0;
+                  const limit = Number(categoryBudgets[c.id]) || 0;
+                  const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+                  const over = limit > 0 && spent > limit;
+                  return (
+                    <div key={c.id} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs flex items-center gap-1.5 w-36 shrink-0" style={{ color: C.ink }}><Icon name={c.icon} size={13} style={{ color: c.color }} />{c.label}</span>
+                        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: C.panelAlt }}>
+                          {limit > 0 && <div className="h-full rounded-full" style={{ width: `${pct}%`, background: over ? C.alert : c.color }} />}
+                        </div>
+                        <span className="text-xs tabular-nums shrink-0" style={{ color: over ? C.alert : C.inkMuted }}>{formatBRL(spent)}{limit > 0 ? ` / ${formatBRL(limit)}` : ''}</span>
+                        <input type="number" min="0" step="10" placeholder="Sem teto" value={categoryBudgets[c.id] ?? ''} onChange={(e) => handleSetCategoryBudget(c.id, e.target.value)}
+                          className="w-24 shrink-0 rounded-lg px-2 py-1 text-xs outline-none" style={{ background: C.panelAlt, border: `1px solid ${C.border}`, color: C.ink }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+
             <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
               {filteredExpenses.length === 0 ? <p className="text-sm p-6 text-center" style={{ color: C.inkMuted }}>Nenhum gasto encontrado com esses filtros.</p> : (
                 <div className="divide-y" style={{ borderColor: C.border }}>
-                  {filteredExpenses.map((e) => {
+                  {filteredExpenses.slice(0, expensesVisibleCount).map((e) => {
                     const cat = catById(e.category);
                     const card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
                     return (
                       <div key={e.id} className="flex items-center gap-3 px-4 py-3">
                         <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                            {e.receipt && e.receipt.startsWith('http') && (
+                              <a href={e.receipt} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Abrir comprovante" style={{ color: C.gold }}>
+                                <Icon name="link" size={12} />
+                              </a>
+                            )}
+                          </div>
                           <p className="text-xs" style={{ color: C.inkMuted }}>
                             {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>} · {BUDGET_TYPES.find((bt) => bt.id === e.budgetType)?.label}
                             {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
@@ -1047,13 +1326,16 @@ function FinanceDashboard() {
                   })}
                 </div>
               )}
+              {filteredExpenses.length > expensesVisibleCount && (
+                <div className="p-3 text-center"><button onClick={() => setExpensesVisibleCount((n) => n + 25)} className="text-xs" style={{ color: C.pine }}>Carregar mais ({filteredExpenses.length - expensesVisibleCount} restantes)</button></div>
+              )}
             </div>
           </div>
         )}
 
         {activeTab === 'report' && (
           <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-serif font-semibold">Relatório mensal</h2><p className="text-sm" style={{ color: C.inkMuted }}>{monthLabel(selectedMonth)} · comparação com {monthLabel(previousMonthKey)}</p></div><div className="flex gap-2"><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} /><SecondaryButton onClick={() => window.print()}><Icon name="download" size={14} /> Imprimir / PDF</SecondaryButton></div></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-serif font-semibold">Relatório mensal</h2><p className="text-sm" style={{ color: C.inkMuted }}>{monthLabel(selectedMonth)} · comparação com {monthLabel(previousMonthKey)}</p></div><div className="flex gap-2"><input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} /><SecondaryButton onClick={handleDownloadReportPDF}><Icon name="download" size={14} /> Baixar PDF</SecondaryButton></div></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><StatCard label="Total gasto no mês" value={formatBRL(currentMonthTotal)} sub={previousMonthTotal ? `${currentMonthTotal >= previousMonthTotal ? '+' : ''}${((currentMonthTotal / previousMonthTotal - 1) * 100).toFixed(1)}% vs. mês anterior` : 'Sem base anterior'} accent={C.alert} /><StatCard label="Mês anterior" value={formatBRL(previousMonthTotal)} /><StatCard label="Quanto sobrou da renda" value={formatBRL(reportIncome - currentMonthTotal)} sub={`Renda considerada: ${formatBRL(reportIncome)}`} accent={reportIncome - currentMonthTotal < 0 ? C.alert : C.pine} /></div>
             <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}><h3 className="text-sm font-medium mb-4">Total por categoria</h3>{CATEGORIES.map((category) => { const value = monthEntries.filter((e) => e.category === category.id).reduce((sum, e) => sum + Number(e.amount || 0), 0); return <div key={category.id} className="flex items-center justify-between py-2 border-b last:border-b-0" style={{ borderColor: C.border }}><span className="flex items-center gap-2 text-sm"><Icon name={category.icon} size={15} style={{ color: category.color }} />{category.label}</span><span className="text-sm tabular-nums">{formatBRL(value)}</span></div>; })}</div>
           </div>
@@ -1298,14 +1580,21 @@ function FinanceDashboard() {
             <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
               {historyEntries.length === 0 ? <p className="text-sm p-6 text-center" style={{ color: C.inkMuted }}>Nenhum lançamento encontrado com esses filtros.</p> : (
                 <div className="divide-y" style={{ borderColor: C.border }}>
-                  {historyEntries.map((e) => {
+                  {historyEntries.slice(0, historyVisibleCount).map((e) => {
                     const cat = catById(e.category);
                     const card = e.cardId ? cards.find((c) => c.id === e.cardId) : null;
                     return (
                       <div key={e.id} className="flex items-center gap-3 px-4 py-3">
                         <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
+                            {e.receipt && e.receipt.startsWith('http') && (
+                              <a href={e.receipt} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Abrir comprovante" style={{ color: C.gold }}>
+                                <Icon name="link" size={12} />
+                              </a>
+                            )}
+                          </div>
                           <p className="text-xs" style={{ color: C.inkMuted }}>
                             {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>}
                             {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
@@ -1319,7 +1608,58 @@ function FinanceDashboard() {
                   })}
                 </div>
               )}
+              {historyEntries.length > historyVisibleCount && (
+                <div className="p-3 text-center"><button onClick={() => setHistoryVisibleCount((n) => n + 25)} className="text-xs" style={{ color: C.pine }}>Carregar mais ({historyEntries.length - historyVisibleCount} restantes)</button></div>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* ---------------- ACTIVITY LOG -------- */}
+        {activeTab === 'activity' && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-serif font-semibold mr-auto">Log de atividades</h2>
+              <p className="text-xs" style={{ color: C.inkMuted }}>Acompanhe tudo que você e seu parceiro fizeram</p>
+            </div>
+            {activityLog.length === 0 ? (
+              <div className="rounded-xl p-10 text-center" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <Icon name="history" size={32} style={{ color: C.inkMuted, margin: '0 auto 8px' }} />
+                <p className="text-sm" style={{ color: C.inkMuted }}>Nenhuma atividade registrada ainda</p>
+              </div>
+            ) : (
+              <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="divide-y" style={{ borderColor: C.border }}>
+                  {activityLog.map((log) => {
+                    const logDate = new Date(log.at);
+                    const now = new Date();
+                    let timeStr = '';
+                    const diffMs = now - logDate;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    if (diffMins < 1) timeStr = 'agora mesmo';
+                    else if (diffMins < 60) timeStr = `${diffMins}m atrás`;
+                    else if (diffHours < 24) timeStr = `${diffHours}h atrás`;
+                    else if (diffDays < 7) timeStr = `${diffDays}d atrás`;
+                    else timeStr = logDate.toLocaleDateString('pt-BR');
+                    return (
+                      <div key={log.id} className="flex items-start gap-3 px-4 py-3 hover:opacity-80 transition-opacity">
+                        <div className="rounded-full p-2.5 shrink-0" style={{ background: C.pineLight }}>
+                          <Icon name="zap" size={14} style={{ color: C.pine }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm" style={{ color: C.ink }}>
+                            <strong>{log.who}</strong> {log.action}
+                          </p>
+                          <p className="text-xs" style={{ color: C.inkMuted }}>{timeStr}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1422,10 +1762,24 @@ service cloud.firestore {
                 </label>
               </div>
             </div>
+            <div className="rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: C.ink }}>Log de atividades</h3>
+              <p className="text-xs mb-4" style={{ color: C.inkMuted }}>Últimas ações registradas no painel (quem lançou ou removeu o quê).</p>
+              {activityLog.length === 0 ? (
+                <p className="text-sm" style={{ color: C.inkMuted }}>Nenhuma atividade registrada ainda.</p>
+              ) : (
+                <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                  {activityLog.map((a) => (
+                    <div key={a.id} className="text-xs flex items-start gap-2" style={{ color: C.inkMuted }}>
+                      <span className="shrink-0" style={{ color: C.ink }}>{new Date(a.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{a.who} {a.action}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
-
-        {/* Footer */}
         <div className="mt-10 pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" style={{ borderTop: `1px solid ${C.border}` }}>
           <span className="text-xs" style={{ color: C.inkMuted }}>Os dados ficam salvos neste navegador{sync.connected ? ' e sincronizados em tempo real com o banco de dados na nuvem' : ''}.</span>
           <button onClick={handleResetData} className="text-xs" style={{ color: resetArmed ? C.alert : C.inkMuted }}>{resetArmed ? 'Clique de novo para confirmar' : 'Redefinir todos os dados'}</button>
@@ -1433,9 +1787,25 @@ service cloud.firestore {
       </div>
       <Toast message={toast} />
 
+      {/* Barra de navegação inferior fixa (mobile) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch bottom-nav-safe" style={{ background: C.panel, borderTop: `1px solid ${C.border}`, boxShadow: '0 -6px 20px rgba(28,38,32,.08)' }}>
+        {[NAV[0], NAV[1], { id: 'cards', label: 'Cartões', icon: 'creditcard' }, NAV.find((n) => n.id === 'goals')].map((n) => {
+          const active = activeTab === n.id;
+          return (
+            <button key={n.id} onClick={() => { setActiveTab(n.id); setMobileNavOpen(false); }} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5"
+              style={{ color: active ? C.pine : C.inkMuted }}>
+              <Icon name={n.icon} size={19} /><span className="text-[10px]">{n.label}</span>
+            </button>
+          );
+        })}
+        <button onClick={() => setMobileNavOpen((v) => !v)} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5" style={{ color: mobileNavOpen ? C.pine : C.inkMuted }}>
+          <Icon name="more" size={19} /><span className="text-[10px]">Mais</span>
+        </button>
+      </div>
+
       {/* Botão flutuante — lançar gasto de qualquer lugar do app */}
       <button onClick={() => setQuickAddOpen(true)}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-40"
+        className="fixed bottom-24 md:bottom-6 right-6 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-40"
         style={{ background: C.pine, color: '#fff', width: 58, height: 58 }}>
         <Icon name="plus" size={26} />
       </button>
@@ -1489,6 +1859,15 @@ service cloud.firestore {
 
             <div className="mt-4"><FieldLabel>Descrição (opcional)</FieldLabel>
               <TextInput type="text" placeholder="Ex.: Mercado do mês, cinema…" value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} />
+            </div>
+
+            <div className="mt-4"><FieldLabel>Comprovante ou link (opcional)</FieldLabel>
+              <TextInput type="text" placeholder="Ex.: URL da nota fiscal, Print do comprovante…" value={entryForm.receipt} onChange={(e) => setEntryForm({ ...entryForm, receipt: e.target.value })} />
+              {entryForm.receipt && entryForm.receipt.startsWith('http') && (
+                <a href={entryForm.receipt} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 flex items-center gap-1 hover:underline" style={{ color: C.pine }}>
+                  <Icon name="link" size={12} /> Abrir comprovante
+                </a>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1547,6 +1926,15 @@ service cloud.firestore {
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<FinanceDashboard />);
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { 
+      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+        console.warn('Service Worker registration failed:', err);
+      }); 
+    });
+  }
 </script>
 </body>
 </html>
