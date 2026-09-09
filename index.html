@@ -538,14 +538,7 @@ function FinanceDashboard() {
   const [historyVisibleCount, setHistoryVisibleCount] = useState(25);
   const [expensesVisibleCount, setExpensesVisibleCount] = useState(25);
   applyTheme(theme);
-  useEffect(() => {
-    LocalStore.set('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-  useEffect(() => { setExpensesVisibleCount(25); }, [expenseFilter, expensesShowAllMonths, selectedMonth]);
-  useEffect(() => { setHistoryVisibleCount(25); }, [historyFilter, showAllMonths, selectedMonth]);
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
-
+  
   const [entryForm, setEntryForm] = useState(emptyEntryForm());
   const [entryError, setEntryError] = useState('');
   const [goalForm, setGoalForm] = useState(emptyGoalForm());
@@ -553,6 +546,14 @@ function FinanceDashboard() {
   const [contribDrafts, setContribDrafts] = useState({});
   const [historyFilter, setHistoryFilter] = useState({ person: 'todos', category: 'todas' });
   const [showAllMonths, setShowAllMonths] = useState(false);
+  
+  useEffect(() => {
+    LocalStore.set('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+  useEffect(() => { setExpensesVisibleCount(25); }, [expenseFilter, expensesShowAllMonths, selectedMonth]);
+  useEffect(() => { setHistoryVisibleCount(25); }, [historyFilter, showAllMonths, selectedMonth]);
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   const [fbConfigText, setFbConfigText] = useState(() => { const c = LocalStore.get('fb_config'); return c ? JSON.stringify(c, null, 2) : ''; });
   const [fbCodeInput, setFbCodeInput] = useState(() => LocalStore.get('fb_code') || '');
   const [partnerUid, setPartnerUid] = useState('');
