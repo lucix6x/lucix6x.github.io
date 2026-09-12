@@ -39,9 +39,6 @@
   .tab-fade { animation: tabFadeIn .18s ease-out; }
   @keyframes tabFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   .bottom-nav-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
-  .mobile-nav-bottom { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; padding: env(safe-area-inset-bottom, 8px) 8px 8px; background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(10px); border-top: 1px solid #E3DECF; }
-  [data-theme="dark"] .mobile-nav-bottom { background: rgba(27, 34, 28, 0.98); border-top-color: #333E34; }
-  @media (min-width: 768px) { .mobile-nav-bottom { display: none; } }
   button, .nav-strip button { transition: background-color .15s ease, color .15s ease, transform .1s ease; }
 </style>
 </head>
@@ -108,6 +105,7 @@ function Icon({ name, size = 16, style, className }) {
     receipt: <><path d="M6 3h12v18l-2-1.3L14 21l-2-1.3L10 21l-2-1.3L6 21V3z"/><path d="M9 8h6M9 12h6M9 16h4"/></>,
     moon: <><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
+    pencil: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H17a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 1 4 4.5M4 19.5L12 12m0 0l8-8m-8 8l8-8M4 19.5v3h3"/></>,
   };
   return <svg {...p}>{paths[name] || null}</svg>;
 }
@@ -141,16 +139,15 @@ const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','
 const NAV = [
   { id: 'dashboard', label: 'Visão geral', icon: 'piechart' },
   { id: 'expenses', label: 'Gastos', icon: 'receipt' },
-  { id: 'partner', label: 'Parceiro', icon: 'car' },
   { id: 'report', label: 'Relatório mensal', icon: 'filetext' },
-  { id: 'income', label: 'Renda', icon: 'landmark' },
+  { id: 'income', label: 'Ganhos', icon: 'landmark' },
+  { id: 'debts', label: 'Dívidas', icon: 'alert' },
   { id: 'cards', label: 'Cartões', icon: 'creditcard' },
   { id: 'goals', label: 'Metas', icon: 'piggy' },
   { id: 'history', label: 'Histórico', icon: 'history' },
-  { id: 'activity', label: 'Atividades', icon: 'zap' },
   { id: 'config', label: 'Sincronização', icon: 'cloud' },
 ];
-const SYNC_KEYS = ['income', 'entries', 'partnerEntries', 'goals', 'budgetRule', 'cards', 'cashMovements', 'categoryBudgets', 'activityLog'];
+const SYNC_KEYS = ['income', 'entries', 'goals', 'budgetRule', 'cards', 'cashMovements', 'categoryBudgets', 'activityLog', 'debts', 'gains'];
 const PAYMENT_METHODS = [
   { id: 'debito', label: 'Dinheiro / Pix / Débito' },
   { id: 'credito', label: 'Cartão de crédito' },
@@ -175,15 +172,7 @@ const last6MonthKeys = (endKey) => {
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const defaultIncome = { p1: { name: 'Pessoa 1', amount: 0 }, p2: { name: 'Pessoa 2', amount: 0 } };
 const defaultBudgetRule = { necessidade: 50, desejo: 30, poupanca: 20 };
-const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '', receipt: '' });
-const PARTNER_EXPENSE_CATEGORIES = [
-  { id: 'combustivel', label: 'Combustível' },
-  { id: 'pecas', label: 'Peças' },
-  { id: 'manutencao', label: 'Manutenção' },
-  { id: 'lavagem', label: 'Lavagem' },
-  { id: 'outros', label: 'Outros' },
-];
-const emptyPartnerForm = () => ({ date: todayISO(), type: 'ganho', vehicle: 'moto', category: 'combustivel', amount: '', kilometers: '', description: '' });
+const emptyEntryForm = () => ({ date: todayISO(), description: '', category: 'moradia', amount: '', person: 'Casal', budgetType: 'necessidade', recurrence: 'Único', paymentMethod: 'debito', cardId: '', installments: 1, petSubcategory: '', receiptUrl: '' });
 const addMonthsToDate = (iso, n) => {
   const [y, m, d] = iso.split('-').map(Number);
   let mm = m - 1 + n, yy = y;
@@ -192,6 +181,12 @@ const addMonthsToDate = (iso, n) => {
   return `${yy}-${String(mm + 1).padStart(2, '0')}-${String(Math.min(d, lastDay)).padStart(2, '0')}`;
 };
 const emptyGoalForm = () => ({ name: '', target: '', current: '', deadline: '', category: 'Reserva de emergência' });
+const DEBT_TYPES = [
+  { id: 'servico', label: 'Serviço/Conta', icon: 'filetext' },
+  { id: 'emprestimo', label: 'Empréstimo', icon: 'landmark' },
+  { id: 'outro', label: 'Outro', icon: 'more' },
+];
+const emptyDebtForm = () => ({ description: '', type: 'servico', amount: '', dueDate: '', responsible: 'Casal', status: 'pendente' });
 
 // ============================================================
 // Armazenamento local (sempre ativo — funciona offline)
@@ -522,8 +517,9 @@ function TrendChart({ data, referenceValue, width = 560, height = 220 }) {
 function FinanceDashboard() {
   const [income, setIncome] = useState(() => LocalStore.get('income') || defaultIncome);
   const [entries, setEntries] = useState(() => LocalStore.get('entries') || []);
-  const [partnerEntries, setPartnerEntries] = useState(() => LocalStore.get('partnerEntries') || []);
   const [goals, setGoals] = useState(() => LocalStore.get('goals') || []);
+  const [debts, setDebts] = useState(() => LocalStore.get('debts') || []);
+  const [gains, setGains] = useState(() => LocalStore.get('gains') || []);
   const [budgetRule, setBudgetRule] = useState(() => LocalStore.get('budgetRule') || defaultBudgetRule);
   const [cards, setCards] = useState(() => LocalStore.get('cards') || []);
   const [cashMovements, setCashMovements] = useState(() => LocalStore.get('cashMovements') || []);
@@ -541,24 +537,21 @@ function FinanceDashboard() {
   const [viewingCardId, setViewingCardId] = useState(null);
   const [expenseFilter, setExpenseFilter] = useState({ person: 'todos', category: 'todas', paymentMethod: 'todas', cardId: 'todos', search: '' });
   const [expensesShowAllMonths, setExpensesShowAllMonths] = useState(false);
-  const [showActivityTab, setShowActivityTab] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState({ person: 'todos', category: 'todas' });
+  const [showAllMonths, setShowAllMonths] = useState(false);
   const [theme, setTheme] = useState(() => LocalStore.get('theme') || 'light');
   const [categoryBudgets, setCategoryBudgets] = useState(() => LocalStore.get('categoryBudgets') || {});
   const [activityLog, setActivityLog] = useState(() => LocalStore.get('activityLog') || []);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(25);
   const [expensesVisibleCount, setExpensesVisibleCount] = useState(25);
+  const [debtForm, setDebtForm] = useState(emptyDebtForm());
+  const [debtError, setDebtError] = useState('');
+  const [editingDebtId, setEditingDebtId] = useState(null);
+  const [gainForm, setGainForm] = useState({ amount: '', method: 'pix', description: '', person: income.p1.name || 'Pessoa 1', date: todayISO() });
+  const [gainError, setGainError] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [formCollapsedStates, setFormCollapsedStates] = useState({ income: false, cash: false, cards: false });
   applyTheme(theme);
-  
-  const [entryForm, setEntryForm] = useState(emptyEntryForm());
-  const [entryError, setEntryError] = useState('');
-  const [partnerForm, setPartnerForm] = useState(emptyPartnerForm());
-  const [partnerError, setPartnerError] = useState('');
-  const [goalForm, setGoalForm] = useState(emptyGoalForm());
-  const [goalError, setGoalError] = useState('');
-  const [contribDrafts, setContribDrafts] = useState({});
-  const [historyFilter, setHistoryFilter] = useState({ person: 'todos', category: 'todas' });
-  const [showAllMonths, setShowAllMonths] = useState(false);
-  
   useEffect(() => {
     LocalStore.set('theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
@@ -566,6 +559,12 @@ function FinanceDashboard() {
   useEffect(() => { setExpensesVisibleCount(25); }, [expenseFilter, expensesShowAllMonths, selectedMonth]);
   useEffect(() => { setHistoryVisibleCount(25); }, [historyFilter, showAllMonths, selectedMonth]);
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
+  const [entryForm, setEntryForm] = useState(emptyEntryForm());
+  const [entryError, setEntryError] = useState('');
+  const [goalForm, setGoalForm] = useState(emptyGoalForm());
+  const [goalError, setGoalError] = useState('');
+  const [contribDrafts, setContribDrafts] = useState({});
   const [fbConfigText, setFbConfigText] = useState(() => { const c = LocalStore.get('fb_config'); return c ? JSON.stringify(c, null, 2) : ''; });
   const [fbCodeInput, setFbCodeInput] = useState(() => LocalStore.get('fb_code') || '');
   const [partnerUid, setPartnerUid] = useState('');
@@ -578,8 +577,9 @@ function FinanceDashboard() {
   const applyRemoteData = useCallback((data, isLocalEcho) => {
     if (data.income !== undefined) { setIncome(data.income); LocalStore.set('income', data.income); }
     if (data.entries !== undefined) { setEntries(data.entries); LocalStore.set('entries', data.entries); }
-    if (data.partnerEntries !== undefined) { setPartnerEntries(data.partnerEntries); LocalStore.set('partnerEntries', data.partnerEntries); }
     if (data.goals !== undefined) { setGoals(data.goals); LocalStore.set('goals', data.goals); }
+    if (data.debts !== undefined) { setDebts(data.debts); LocalStore.set('debts', data.debts); }
+    if (data.gains !== undefined) { setGains(data.gains); LocalStore.set('gains', data.gains); }
     if (data.budgetRule !== undefined) { setBudgetRule(data.budgetRule); LocalStore.set('budgetRule', data.budgetRule); }
     if (data.cards !== undefined) { setCards(data.cards); LocalStore.set('cards', data.cards); }
     if (data.cashMovements !== undefined) { setCashMovements(data.cashMovements); LocalStore.set('cashMovements', data.cashMovements); }
@@ -626,7 +626,7 @@ function FinanceDashboard() {
       showToast('Conectado ao banco de dados');
       // envia o estado atual como primeira sincronização, caso o documento esteja vazio
       SYNC_KEYS.forEach((k) => {
-        const val = { income, entries, partnerEntries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }[k];
+        const val = { income, entries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }[k];
         sync.pushKey(k, val).catch(() => {});
       });
     } catch (e) {
@@ -728,6 +728,7 @@ function FinanceDashboard() {
         installmentNumber: i + 1,
         groupId,
         petSubcategory: form.category === 'pet' ? (form.petSubcategory || '') : '',
+        receiptUrl: form.receiptUrl ? form.receiptUrl.trim() : '',
       });
     }
     return list;
@@ -758,35 +759,6 @@ function FinanceDashboard() {
     setQuickAddOpen(false);
   };
   const handleDeleteEntry = (id) => { const target = entries.find((e) => e.id === id); const updated = entries.filter((e) => e.id !== id); setEntries(updated); persist('entries', updated); if (target) logActivity(`removeu o lançamento "${target.description}" (${formatBRL(target.amount)})`); };
-
-  // ---- Painel do parceiro: entregas, abastecimentos e manutenção ----
-  const handleAddPartnerEntry = () => {
-    setPartnerError('');
-    const amount = parseFloat(partnerForm.amount);
-    if (!partnerForm.date) return setPartnerError('Escolha uma data.');
-    if (!amount || amount <= 0) return setPartnerError('Informe um valor maior que zero.');
-    const item = {
-      id: uid(),
-      date: partnerForm.date,
-      type: partnerForm.type,
-      vehicle: partnerForm.vehicle,
-      category: partnerForm.type === 'gasto' ? partnerForm.category : 'entregas',
-      amount,
-      kilometers: Number(partnerForm.kilometers) || 0,
-      description: partnerForm.description.trim() || (partnerForm.type === 'ganho' ? 'Entregas' : PARTNER_EXPENSE_CATEGORIES.find((c) => c.id === partnerForm.category).label),
-    };
-    const updated = [...partnerEntries, item];
-    setPartnerEntries(updated);
-    persist('partnerEntries', updated);
-    logActivity(`registrou ${partnerForm.type === 'ganho' ? 'ganho' : 'gasto'} de ${formatBRL(amount)} no painel do parceiro`);
-    setPartnerForm({ ...emptyPartnerForm(), vehicle: partnerForm.vehicle });
-    showToast('Registro salvo');
-  };
-  const handleDeletePartnerEntry = (id) => {
-    const updated = partnerEntries.filter((item) => item.id !== id);
-    setPartnerEntries(updated);
-    persist('partnerEntries', updated);
-  };
 
   // ---- Handlers: cartões de crédito ----
   const handleSaveCard = () => {
@@ -824,31 +796,21 @@ function FinanceDashboard() {
   const totalCardInvoices = cardInvoices.reduce((s, c) => s + c.spent, 0);
   const nextDueCard = useMemo(() => cardInvoices.filter((c) => c.spent > 0).sort((a, b) => a.daysToDue - b.daysToDue)[0], [cardInvoices]);
 
-  // ---- Avisa ao abrir o app sobre faturas de cartão vencendo em breve ----
+  // ---- Avisa (uma vez por dia) sobre faturas de cartão vencendo em breve ----
   useEffect(() => {
-    if (!sync.user || cardInvoices.length === 0 || !sync.authReady) return;
+    if (!sync.user || cardInvoices.length === 0) return;
+    const todayStr = todayISO();
+    if (LocalStore.get('lastInvoiceCheck') === todayStr) return;
+    LocalStore.set('lastInvoiceCheck', todayStr);
     const dueSoon = cardInvoices.filter((c) => c.spent > 0 && c.daysToDue <= 3);
     if (dueSoon.length === 0) return;
-    const hasShown = LocalStore.get('invoiceNotificationShown') === 'true';
-    if (!hasShown) {
-      dueSoon.forEach((c) => {
-        const msg = `Fatura do ${c.name} vence em ${c.daysToDue} dia(s) · ${formatBRL(c.spent)}`;
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('💳 Fatura próxima do vencimento', { 
-            body: msg, 
-            icon: './icon-192.png', 
-            badge: './icon-192.png',
-            tag: 'invoice-alert'
-          });
-        } else {
-          showToast(msg);
-        }
-      });
-      LocalStore.set('invoiceNotificationShown', 'true');
-      setTimeout(() => LocalStore.set('invoiceNotificationShown', 'false'), 86400000); // Reset após 24h
-    }
+    dueSoon.forEach((c) => {
+      const msg = `Fatura do ${c.name} vence em ${c.daysToDue}d (${formatBRL(c.spent)})`;
+      if ('Notification' in window && Notification.permission === 'granted') new Notification('Fatura próxima do vencimento', { body: msg });
+      else showToast(msg);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardInvoices, sync.user, sync.authReady]);
+  }, [cardInvoices, sync.user]);
 
   // ---- Gasto com pets no mês selecionado ----
   const petSpentThisMonth = useMemo(() =>
@@ -905,9 +867,69 @@ function FinanceDashboard() {
 
   const handleResetData = () => {
     if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000); return; }
-    setEntries([]); setPartnerEntries([]); setGoals([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]); setCategoryBudgets({}); setActivityLog([]);
-    persist('entries', []); persist('partnerEntries', []); persist('goals', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []); persist('categoryBudgets', {}); persist('activityLog', []);
+    setEntries([]); setGoals([]); setDebts([]); setGains([]); setIncome(defaultIncome); setBudgetRule(defaultBudgetRule); setCards([]); setCashMovements([]); setCategoryBudgets({}); setActivityLog([]);
+    persist('entries', []); persist('goals', []); persist('debts', []); persist('gains', []); persist('income', defaultIncome); persist('budgetRule', defaultBudgetRule); persist('cards', []); persist('cashMovements', []); persist('categoryBudgets', {}); persist('activityLog', []);
     setResetArmed(false); showToast('Dados redefinidos');
+  };
+
+  // ---- Handlers: dívidas ----
+  const handleSaveDebt = () => {
+    setDebtError('');
+    const amount = parseFloat(debtForm.amount);
+    if (!debtForm.description.trim()) return setDebtError('Descreva a dívida.');
+    if (!amount || amount <= 0) return setDebtError('Informe um valor maior que zero.');
+    let updated;
+    if (editingDebtId) {
+      updated = debts.map((d) => (d.id === editingDebtId ? { ...debtForm, id: editingDebtId, amount } : d));
+    } else {
+      const newDebt = { ...debtForm, id: uid(), amount };
+      updated = [...debts, newDebt];
+    }
+    setDebts(updated); persist('debts', updated);
+    setDebtForm(emptyDebtForm()); setEditingDebtId(null);
+    logActivity(editingDebtId ? `editou a dívida "${debtForm.description}" (${formatBRL(amount)})` : `registrou a dívida "${debtForm.description}" (${formatBRL(amount)})`);
+    showToast(editingDebtId ? 'Dívida atualizada' : 'Dívida registrada');
+  };
+  const handleDeleteDebt = (id) => { const target = debts.find((d) => d.id === id); const updated = debts.filter((d) => d.id !== id); setDebts(updated); persist('debts', updated); if (target) logActivity(`removeu a dívida "${target.description}"`); };
+  const handleEditDebt = (debt) => { setDebtForm({ ...debt }); setEditingDebtId(debt.id); };
+  
+  // ---- Handlers: ganhos ----
+  const handleSaveGain = () => {
+    setGainError('');
+    const amount = parseFloat(gainForm.amount);
+    if (!amount || amount <= 0) return setGainError('Informe um valor maior que zero.');
+    if (!gainForm.person.trim()) return setGainError('Escolha quem fez o ganho.');
+    const gain = { id: uid(), ...gainForm, amount, date: gainForm.date || todayISO() };
+    const updated = [...gains, gain];
+    setGains(updated); persist('gains', updated);
+    
+    // Adiciona o ganho ao caixa
+    const cashMovement = { id: uid(), type: 'entrada', amount, description: `Ganho de ${gainForm.person}${gainForm.description ? ` (${gainForm.description})` : ''}`, date: gainForm.date || todayISO() };
+    const updatedCash = [...cashMovements, cashMovement];
+    setCashMovements(updatedCash); persist('cashMovements', updatedCash);
+    
+    logActivity(`registrou ganho de ${formatBRL(amount)} de ${gainForm.person} via ${gainForm.method}`);
+    setGainForm({ amount: '', method: 'pix', description: '', person: income.p1.name || 'Pessoa 1', date: todayISO() });
+    showToast(`Ganho de ${formatBRL(amount)} adicionado ao caixa`);
+  };
+  const handleDeleteGain = (id) => { const target = gains.find((g) => g.id === id); const updated = gains.filter((g) => g.id !== id); setGains(updated); persist('gains', updated); if (target) logActivity(`removeu ganho de ${formatBRL(target.amount)}`); };
+
+  // ---- Handlers: editar lançamento de gasto ----
+  const handleEditEntry = (entry) => { setEntryForm({ ...entry }); setEditingEntryId(entry.id); setQuickAddOpen(true); };
+  const handleSaveEditEntry = () => {
+    setEntryError('');
+    const amount = parseFloat(entryForm.amount);
+    if (!entryForm.date) return setEntryError('Escolha uma data.');
+    if (!amount || amount <= 0) return setEntryError('Informe um valor maior que zero.');
+    if (entryForm.paymentMethod === 'credito' && !entryForm.cardId) return setEntryError('Escolha o cartão usado.');
+    
+    const updated = entries.map((e) => (e.id === editingEntryId ? { ...entryForm, amount } : e));
+    setEntries(updated); persist('entries', updated);
+    logActivity(`editou lançamento "${entryForm.description}" para ${formatBRL(amount)}`);
+    setEntryForm(emptyEntryForm());
+    setEditingEntryId(null);
+    setQuickAddOpen(false);
+    showToast('Lançamento atualizado');
   };
 
   // ---- Backup local (JSON e CSV) ----
@@ -918,7 +940,7 @@ function FinanceDashboard() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
   const handleExportJSON = () => {
-    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, partnerEntries, goals, budgetRule, cards, cashMovements, categoryBudgets, activityLog }, null, 2), 'application/json');
+    downloadFile('painel-financeiro-backup.json', JSON.stringify({ income, entries, goals, debts, gains, budgetRule, cards, cashMovements, categoryBudgets, activityLog }, null, 2), 'application/json');
     showToast('Backup .json baixado');
   };
   const handleExportCSV = () => {
@@ -932,88 +954,39 @@ function FinanceDashboard() {
     if (!window.jspdf) { showToast('Não foi possível carregar o gerador de PDF. Verifique sua conexão.'); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    let y = 15;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-    doc.text('📊 Relatório Mensal — Finanças a Dois', 14, y); y += 10;
+    let y = 20;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+    doc.text('Relatório mensal — Finanças a Dois', 14, y); y += 8;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-    doc.text(`Mês: ${monthLabel(selectedMonth)} · Período anterior: ${monthLabel(previousMonthKey)}`, 14, y); y += 1;
-    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, y); y += 8;
+    doc.text(`${monthLabel(selectedMonth)} · comparação com ${monthLabel(previousMonthKey)}`, 14, y); y += 10;
 
-    // Linha de separação
-    doc.setDrawColor(31, 77, 58);
-    doc.line(14, y, 196, y); y += 5;
-
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('RESUMO FINANCEIRO', 14, y); y += 7;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('Resumo', 14, y); y += 7;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-    const summaryData = [
-      [`💰 Renda conjunta`, formatBRL(reportIncome)],
-      [`📉 Total gasto (este mês)`, formatBRL(currentMonthTotal)],
-      [`📈 Mês anterior`, formatBRL(previousMonthTotal)],
-      [`✨ Saldo (Renda - Gastos)`, formatBRL(reportIncome - currentMonthTotal)],
-      [`📊 Taxa de poupança`, `${savingsRate.toFixed(1)}%`],
-    ];
-    summaryData.forEach(([label, val]) => { 
-      doc.text(`${label}: ${val}`, 14, y); y += 6; 
-    });
-    y += 2;
+    [
+      [`Total gasto no mês`, formatBRL(currentMonthTotal)],
+      [`Mês anterior`, formatBRL(previousMonthTotal)],
+      [`Renda considerada`, formatBRL(reportIncome)],
+      [`Quanto sobrou`, formatBRL(reportIncome - currentMonthTotal)],
+    ].forEach(([label, val]) => { doc.text(`${label}: ${val}`, 14, y); y += 6; });
+    y += 4;
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GASTOS POR CATEGORIA', 14, y); y += 7;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('Total por categoria', 14, y); y += 7;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
     CATEGORIES.forEach((category) => {
       const value = monthEntries.filter((e) => e.category === category.id).reduce((sum, e) => sum + Number(e.amount || 0), 0);
-      if (value > 0) { 
-        doc.text(`  • ${category.label}: ${formatBRL(value)}`, 14, y); 
-        y += 5; 
-        if (y > 265) { doc.addPage(); y = 20; } 
-      }
+      if (value > 0) { doc.text(`${category.label}: ${formatBRL(value)}`, 14, y); y += 6; if (y > 275) { doc.addPage(); y = 20; } }
     });
-    y += 2;
+    y += 4;
 
-    // Gastos por pessoa
-    if (Object.keys(totalsByPerson).length > 0) {
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GASTOS POR PESSOA', 14, y); y += 7;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      Object.entries(totalsByPerson).forEach(([person, value]) => {
-        if (value > 0) {
-          doc.text(`  • ${person}: ${formatBRL(value)}`, 14, y); 
-          y += 5; 
-        }
-      });
-      y += 2;
-    }
-
-    // Seção de acerto de contas
     if (settlement.paidP1 > 0 || settlement.paidP2 > 0) {
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('ACERTO DE CONTAS (50/50)', 14, y); y += 7;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('Acerto de contas', 14, y); y += 7;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.text(`${settlement.p1Name} pagou: ${formatBRL(settlement.paidP1)} (parte justa: ${formatBRL(settlement.fairP1)})`, 14, y); y += 5;
-      doc.text(`${settlement.p2Name} pagou: ${formatBRL(settlement.paidP2)} (parte justa: ${formatBRL(settlement.fairP2)})`, 14, y); y += 5;
-      
-      if (Math.abs(settlement.balanceP1) < 1) {
-        doc.setTextColor(31, 77, 58);
-        doc.setFont('helvetica', 'bold');
-        doc.text('✓ Contas equilibradas — ninguém deve nada!', 14, y); 
-        y += 6;
-      } else {
-        doc.setTextColor(179, 73, 46);
-        doc.setFont('helvetica', 'bold');
-        const debtor = settlement.balanceP1 > 0 ? settlement.p2Name : settlement.p1Name;
-        const creditor = settlement.balanceP1 > 0 ? settlement.p1Name : settlement.p2Name;
-        doc.text(`${debtor} deve ${formatBRL(Math.abs(settlement.balanceP1))} para ${creditor}`, 14, y);
-        y += 6;
-      }
-      doc.setTextColor(0);
-      y += 2;
+      const txt = Math.abs(settlement.balanceP1) < 1 ? 'Contas equilibradas.' : `${settlement.balanceP1 > 0 ? settlement.p2Name : settlement.p1Name} deve ${formatBRL(Math.abs(settlement.balanceP1))} para ${settlement.balanceP1 > 0 ? settlement.p1Name : settlement.p2Name}.`;
+      doc.text(txt, 14, y); y += 6;
     }
-
-    // Linha de separação final
-    doc.setDrawColor(31, 77, 58);
-    doc.line(14, y, 196, y); y += 4;
-    doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
-    doc.text('Relatório gerado automaticamente pelo app Finanças a Dois', 14, y);
 
     doc.save(`relatorio-${selectedMonth}.pdf`);
-    showToast('PDF do relatório baixado com sucesso!');
+    showToast('PDF do relatório baixado');
   };
   const handleImportJSON = (file) => {
     const reader = new FileReader();
@@ -1022,8 +995,9 @@ function FinanceDashboard() {
         const data = JSON.parse(reader.result);
         if (data.income) { setIncome(data.income); persist('income', data.income); }
         if (data.entries) { setEntries(data.entries); persist('entries', data.entries); }
-        if (data.partnerEntries) { setPartnerEntries(data.partnerEntries); persist('partnerEntries', data.partnerEntries); }
         if (data.goals) { setGoals(data.goals); persist('goals', data.goals); }
+        if (data.debts) { setDebts(data.debts); persist('debts', data.debts); }
+        if (data.gains) { setGains(data.gains); persist('gains', data.gains); }
         if (data.budgetRule) { setBudgetRule(data.budgetRule); persist('budgetRule', data.budgetRule); }
         if (data.cards) { setCards(data.cards); persist('cards', data.cards); }
         if (data.cashMovements) { setCashMovements(data.cashMovements); persist('cashMovements', data.cashMovements); }
@@ -1070,15 +1044,6 @@ function FinanceDashboard() {
   const previousMonthTotal = useMemo(() => entries.filter((e) => monthKeyOf(e.date) === previousMonthKey).reduce((sum, e) => sum + Number(e.amount || 0), 0), [entries, previousMonthKey]);
   const currentMonthTotal = monthEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const reportIncome = totalIncome;
-  const partnerMonthEntries = useMemo(() => partnerEntries.filter((e) => monthKeyOf(e.date) === selectedMonth), [partnerEntries, selectedMonth]);
-  const partnerGains = partnerMonthEntries.filter((e) => e.type === 'ganho');
-  const partnerExpenses = partnerMonthEntries.filter((e) => e.type === 'gasto');
-  const partnerGainsTotal = partnerGains.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const partnerExpensesTotal = partnerExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const partnerNet = partnerGainsTotal - partnerExpensesTotal;
-  const partnerKilometers = partnerMonthEntries.reduce((sum, e) => sum + Number(e.kilometers || 0), 0);
-  const partnerExpenseAverage = partnerExpenses.length ? partnerExpensesTotal / partnerExpenses.length : 0;
-  const partnerGainAverage = partnerGains.length ? partnerGainsTotal / partnerGains.length : 0;
 
   if (!sync.authReady) return <SessionLoading />;
   if (!sync.user) return <AuthPanel sync={sync} configText={fbConfigText} setConfigText={setFbConfigText} code={fbCodeInput} setCode={setFbCodeInput} onConnected={() => showToast('Conectado ao banco de dados')} />;
@@ -1358,14 +1323,7 @@ function FinanceDashboard() {
                       <div key={e.id} className="flex items-center gap-3 px-4 py-3">
                         <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
-                            {e.receipt && e.receipt.startsWith('http') && (
-                              <a href={e.receipt} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Abrir comprovante" style={{ color: C.gold }}>
-                                <Icon name="link" size={12} />
-                              </a>
-                            )}
-                          </div>
+                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
                           <p className="text-xs" style={{ color: C.inkMuted }}>
                             {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>} · {BUDGET_TYPES.find((bt) => bt.id === e.budgetType)?.label}
                             {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
@@ -1373,7 +1331,9 @@ function FinanceDashboard() {
                           </p>
                         </div>
                         <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
-                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                        {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="shrink-0"><Icon name="link" size={14} style={{ color: C.pine }} /></a>}
+                        <button onClick={() => handleEditEntry(e)} className="shrink-0" title="Editar"><Icon name="pencil" size={15} style={{ color: C.gold }} /></button>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0" title="Deletar"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
                       </div>
                     );
                   })}
@@ -1382,54 +1342,6 @@ function FinanceDashboard() {
               {filteredExpenses.length > expensesVisibleCount && (
                 <div className="p-3 text-center"><button onClick={() => setExpensesVisibleCount((n) => n + 25)} className="text-xs" style={{ color: C.pine }}>Carregar mais ({filteredExpenses.length - expensesVisibleCount} restantes)</button></div>
               )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'partner' && (
-          <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between gap-3">
-              <div><h2 className="text-lg font-serif font-semibold">Entregas e veículo</h2><p className="text-sm" style={{ color: C.inkMuted }}>Acompanhe os ganhos das entregas e os custos da sua moto ou carro.</p></div>
-              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-sm" style={{ background: C.panel, border: `1px solid ${C.border}`, color: C.ink }} />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <StatCard label="Ganhos" value={formatBRL(partnerGainsTotal)} sub={`${partnerGains.length} registro(s)`} accent={C.pine} />
-              <StatCard label="Gastos" value={formatBRL(partnerExpensesTotal)} sub={`${partnerExpenses.length} registro(s)`} accent={C.alert} />
-              <StatCard label="Líquido" value={formatBRL(partnerNet)} sub="Ganhos − gastos" accent={partnerNet < 0 ? C.alert : C.pine} />
-              <StatCard label="Média de ganho" value={formatBRL(partnerGainAverage)} sub="Por registro" />
-              <StatCard label="Média de gasto" value={formatBRL(partnerExpenseAverage)} sub={partnerKilometers ? `${partnerKilometers.toLocaleString('pt-BR')} km informados` : 'Informe a quilometragem'} />
-            </div>
-
-            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
-              <h3 className="text-sm font-medium mb-4">Novo registro</h3>
-              <div className="flex gap-2 mb-4">
-                {[{ id: 'ganho', label: 'Ganho de entrega' }, { id: 'gasto', label: 'Gasto do veículo' }].map((type) => {
-                  const active = partnerForm.type === type.id;
-                  return <button key={type.id} type="button" onClick={() => setPartnerForm({ ...partnerForm, type: type.id })} className="rounded-lg px-3 py-2 text-sm" style={{ background: active ? (type.id === 'ganho' ? C.pine : C.alert) : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? (type.id === 'ganho' ? C.pine : C.alert) : C.border}` }}>{type.label}</button>;
-                })}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" min="0" step="0.01" placeholder="0,00" value={partnerForm.amount} onChange={(e) => setPartnerForm({ ...partnerForm, amount: e.target.value })} /></div>
-                <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={partnerForm.date} onChange={(e) => setPartnerForm({ ...partnerForm, date: e.target.value })} /></div>
-                <div><FieldLabel>Veículo</FieldLabel><Select value={partnerForm.vehicle} onChange={(e) => setPartnerForm({ ...partnerForm, vehicle: e.target.value })}><option value="moto">Moto</option><option value="carro">Carro</option></Select></div>
-                <div><FieldLabel>Quilometragem (km)</FieldLabel><TextInput type="number" min="0" step="1" placeholder="Opcional" value={partnerForm.kilometers} onChange={(e) => setPartnerForm({ ...partnerForm, kilometers: e.target.value })} /></div>
-              </div>
-              {partnerForm.type === 'gasto' && <div className="mt-3 max-w-sm"><FieldLabel>Categoria do gasto</FieldLabel><Select value={partnerForm.category} onChange={(e) => setPartnerForm({ ...partnerForm, category: e.target.value })}>{PARTNER_EXPENSE_CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}</Select></div>}
-              <div className="mt-3"><FieldLabel>Descrição (opcional)</FieldLabel><TextInput type="text" placeholder={partnerForm.type === 'ganho' ? 'Ex.: 18 entregas no turno' : 'Ex.: Troca de óleo'} value={partnerForm.description} onChange={(e) => setPartnerForm({ ...partnerForm, description: e.target.value })} /></div>
-              {partnerError && <p className="text-sm mt-3" style={{ color: C.alert }}>{partnerError}</p>}
-              <div className="mt-4"><PrimaryButton onClick={handleAddPartnerEntry}>Salvar registro</PrimaryButton></div>
-            </div>
-
-            <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
-              <div className="px-4 py-3 border-b" style={{ borderColor: C.border }}><h3 className="text-sm font-medium">Lançamentos de {monthLabel(selectedMonth)}</h3></div>
-              {partnerMonthEntries.length === 0 ? <p className="p-6 text-sm text-center" style={{ color: C.inkMuted }}>Nenhum registro neste mês.</p> : <div className="divide-y" style={{ borderColor: C.border }}>
-                {[...partnerMonthEntries].sort((a, b) => (a.date < b.date ? 1 : -1)).map((item) => <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="rounded-full p-2" style={{ background: item.type === 'ganho' ? C.pineLight : C.alertLight }}><Icon name={item.type === 'ganho' ? 'trending' : 'car'} size={14} style={{ color: item.type === 'ganho' ? C.pine : C.alert }} /></div>
-                  <div className="flex-1 min-w-0"><p className="text-sm truncate" style={{ color: C.ink }}>{item.description}</p><p className="text-xs" style={{ color: C.inkMuted }}>{item.date} · {item.vehicle === 'moto' ? 'Moto' : 'Carro'}{item.kilometers ? ` · ${item.kilometers} km` : ''}{item.type === 'gasto' ? ` · ${PARTNER_EXPENSE_CATEGORIES.find((c) => c.id === item.category)?.label || 'Outros'}` : ''}</p></div>
-                  <span className="text-sm tabular-nums" style={{ color: item.type === 'ganho' ? C.pine : C.alert }}>{item.type === 'ganho' ? '+' : '-'} {formatBRL(item.amount)}</span>
-                  <button onClick={() => handleDeletePartnerEntry(item.id)}><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
-                </div>)}
-              </div>}
             </div>
           </div>
         )}
@@ -1446,30 +1358,111 @@ function FinanceDashboard() {
         {/* ---------------- INCOME ---------------- */}
         {activeTab === 'income' && (
           <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[{ key: 'p1', color: C.personA }, { key: 'p2', color: C.personB }].map(({ key, color }) => (
-                <div key={key} className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}`, borderTop: `3px solid ${color}` }}>
-                  <FieldLabel>Nome</FieldLabel>
-                  <TextInput type="text" value={income[key].name} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], name: e.target.value } })} />
-                  <div className="mt-3"><FieldLabel>Renda mensal líquida (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" value={income[key].amount} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], amount: e.target.value } })} /></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Seção de Renda Base */}
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-serif font-semibold">Renda mensal</h3>
+                  <button onClick={() => setFormCollapsedStates({ ...formCollapsedStates, income: !formCollapsedStates.income })} className="text-xs" style={{ color: C.pine }}>{formCollapsedStates.income ? 'Expandir' : 'Minimizar'}</button>
                 </div>
-              ))}
-            </div>
-            <div className="rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3" style={{ background: C.pineLight, border: `1px solid ${C.border}` }}>
-              <div><span className="text-sm" style={{ color: C.inkMuted }}>Renda conjunta mensal</span><div className="text-2xl font-serif font-semibold tabular-nums" style={{ color: C.pine }}>{formatBRL(Number(income.p1.amount || 0) + Number(income.p2.amount || 0))}</div></div>
-              <PrimaryButton onClick={handleSaveIncome}>Salvar renda</PrimaryButton>
-            </div>
-            <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
-              <h3 className="text-sm font-medium mb-1" style={{ color: C.ink }}>Como dividir a renda</h3>
-              <p className="text-xs mb-4" style={{ color: C.inkMuted }}>Ajuste as três fatias — precisam somar 100%. Padrão recomendado: 50% necessidades, 30% desejos, 20% poupança e investimento.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {BUDGET_TYPES.map((bt) => <div key={bt.id}><FieldLabel>{bt.label} (%)</FieldLabel><TextInput type="number" min="0" max="100" value={budgetRule[bt.id]} onChange={(e) => setBudgetRule({ ...budgetRule, [bt.id]: Number(e.target.value) })} /></div>)}
+                {!formCollapsedStates.income && (
+                  <div className="flex flex-col gap-4">
+                    {[{ key: 'p1', color: C.personA }, { key: 'p2', color: C.personB }].map(({ key, color }) => (
+                      <div key={key} className="rounded-lg p-4" style={{ background: C.panelAlt, border: `1px solid ${C.border}`, borderTop: `3px solid ${color}` }}>
+                        <FieldLabel>Nome</FieldLabel>
+                        <TextInput type="text" value={income[key].name} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], name: e.target.value } })} />
+                        <div className="mt-3"><FieldLabel>Renda mensal líquida (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" value={income[key].amount} onChange={(e) => setIncome({ ...income, [key]: { ...income[key], amount: e.target.value } })} /></div>
+                      </div>
+                    ))}
+                    <div className="rounded-lg p-4" style={{ background: C.pineLight, border: `1px solid ${C.border}` }}>
+                      <span className="text-sm" style={{ color: C.inkMuted }}>Renda conjunta mensal</span>
+                      <div className="text-2xl font-serif font-semibold tabular-nums" style={{ color: C.pine }}>{formatBRL(Number(income.p1.amount || 0) + Number(income.p2.amount || 0))}</div>
+                    </div>
+                    <PrimaryButton onClick={handleSaveIncome}>Salvar renda</PrimaryButton>
+                    <div className="rounded-lg p-4" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                      <h4 className="text-sm font-medium mb-3" style={{ color: C.ink }}>Como dividir a renda</h4>
+                      <p className="text-xs mb-3" style={{ color: C.inkMuted }}>Ajuste as três fatias — precisam somar 100%.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {BUDGET_TYPES.map((bt) => <div key={bt.id}><FieldLabel>{bt.label} (%)</FieldLabel><TextInput type="number" min="0" max="100" value={budgetRule[bt.id]} onChange={(e) => setBudgetRule({ ...budgetRule, [bt.id]: Number(e.target.value) })} /></div>)}
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <PrimaryButton onClick={handleSaveBudgetRule}>Salvar meta</PrimaryButton>
+                        <span className="text-xs" style={{ color: C.inkMuted }}>Soma: {Number(budgetRule.necessidade) + Number(budgetRule.desejo) + Number(budgetRule.poupanca)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="mt-4 flex items-center gap-3">
-                <PrimaryButton onClick={handleSaveBudgetRule}>Salvar meta de orçamento</PrimaryButton>
-                <span className="text-xs" style={{ color: C.inkMuted }}>Soma atual: {Number(budgetRule.necessidade) + Number(budgetRule.desejo) + Number(budgetRule.poupanca)}%</span>
+
+              {/* Seção de Ganhos */}
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-serif font-semibold">Registrar ganho</h3>
+                  <button onClick={() => setFormCollapsedStates({ ...formCollapsedStates, income: !formCollapsedStates.income })} className="text-xs" style={{ color: C.pine }}>{formCollapsedStates.income ? 'Expandir' : 'Minimizar'}</button>
+                </div>
+                {!formCollapsedStates.income && (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <FieldLabel>Valor (R$)</FieldLabel>
+                      <TextInput type="number" step="0.01" min="0" placeholder="0,00" value={gainForm.amount} onChange={(e) => setGainForm({ ...gainForm, amount: e.target.value })} />
+                    </div>
+                    <div>
+                      <FieldLabel>De quem</FieldLabel>
+                      <Select value={gainForm.person} onChange={(e) => setGainForm({ ...gainForm, person: e.target.value })}>
+                        {personNames.slice(1).map((p) => <option key={p} value={p}>{p}</option>)}
+                      </Select>
+                    </div>
+                    <div>
+                      <FieldLabel>Método de pagamento</FieldLabel>
+                      <div className="flex gap-2">
+                        {[{ id: 'pix', label: 'Pix' }, { id: 'especie', label: 'Espécie' }].map((m) => {
+                          const active = gainForm.method === m.id;
+                          return (
+                            <button key={m.id} onClick={() => setGainForm({ ...gainForm, method: m.id })}
+                              className="flex-1 rounded-lg px-3 py-2 text-sm"
+                              style={{ background: active ? C.pine : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? C.pine : C.border}` }}>
+                              {m.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <FieldLabel>Descrição (opcional)</FieldLabel>
+                      <TextInput type="text" placeholder="Ex.: Freelance, reembolso…" value={gainForm.description} onChange={(e) => setGainForm({ ...gainForm, description: e.target.value })} />
+                    </div>
+                    <div>
+                      <FieldLabel>Data</FieldLabel>
+                      <TextInput type="date" value={gainForm.date} onChange={(e) => setGainForm({ ...gainForm, date: e.target.value })} />
+                    </div>
+                    {gainError && <p className="text-sm" style={{ color: C.alert }}>{gainError}</p>}
+                    <PrimaryButton onClick={handleSaveGain}>Registrar ganho</PrimaryButton>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Histórico de Ganhos */}
+            {gains.length > 0 && (
+              <div className="rounded-xl p-5" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+                <h3 className="text-sm font-medium mb-4" style={{ color: C.ink }}>Ganhos registrados</h3>
+                <div className="flex flex-col gap-2">
+                  {[...gains].sort((a, b) => (a.date < b.date ? 1 : -1)).map((g) => (
+                    <div key={g.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: C.panelAlt, border: `1px solid ${C.border}` }}>
+                      <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}>
+                        <Icon name="landmark" size={13} style={{ color: C.pine }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm" style={{ color: C.ink }}>{g.person}</p>
+                        <p className="text-xs" style={{ color: C.inkMuted }}>{g.date} · {g.method === 'pix' ? 'Pix' : 'Espécie'}{g.description ? ` · ${g.description}` : ''}</p>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: C.pine }}>{formatBRL(g.amount)}</span>
+                      <button onClick={() => handleDeleteGain(g.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1481,34 +1474,39 @@ function FinanceDashboard() {
                 <h3 className="text-lg font-serif font-semibold">Caixa do casal</h3>
                 <p className="text-xs" style={{ color: C.inkMuted }}>Dinheiro disponível em espécie, carteira ou conta corrente — registrem entradas e retiradas conforme usarem.</p>
               </div>
-              <div className="text-right">
+              <div className="flex flex-col items-end gap-2">
+                <button onClick={() => setFormCollapsedStates({ ...formCollapsedStates, cash: !formCollapsedStates.cash })} className="text-xs" style={{ color: C.pine }}>{formCollapsedStates.cash ? 'Expandir' : 'Minimizar'}</button>
                 <span className="text-xs" style={{ color: C.inkMuted }}>Saldo atual</span>
                 <div className="text-2xl font-serif font-semibold tabular-nums" style={{ color: cashBalance < 0 ? C.alert : C.pine }}>{formatBRL(cashBalance)}</div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-              <div className="sm:col-span-1">
-                <FieldLabel>Tipo</FieldLabel>
-                <div className="flex gap-2">
-                  {[{ id: 'entrada', label: 'Adicionar' }, { id: 'saida', label: 'Remover' }].map((t) => {
-                    const active = cashForm.type === t.id;
-                    return (
-                      <button key={t.id} type="button" onClick={() => setCashForm({ ...cashForm, type: t.id })}
-                        className="flex-1 rounded-lg px-2 py-2 text-xs"
-                        style={{ background: active ? (t.id === 'entrada' ? C.pine : C.alert) : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? (t.id === 'entrada' ? C.pine : C.alert) : C.border}` }}>
-                        {t.label}
-                      </button>
-                    );
-                  })}
+            {!formCollapsedStates.cash && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div className="sm:col-span-1">
+                    <FieldLabel>Tipo</FieldLabel>
+                    <div className="flex gap-2">
+                      {[{ id: 'entrada', label: 'Adicionar' }, { id: 'saida', label: 'Remover' }].map((t) => {
+                        const active = cashForm.type === t.id;
+                        return (
+                          <button key={t.id} type="button" onClick={() => setCashForm({ ...cashForm, type: t.id })}
+                            className="flex-1 rounded-lg px-2 py-2 text-xs"
+                            style={{ background: active ? (t.id === 'entrada' ? C.pine : C.alert) : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? (t.id === 'entrada' ? C.pine : C.alert) : C.border}` }}>
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" placeholder="0,00" value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })} /></div>
+                  <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={cashForm.date} onChange={(e) => setCashForm({ ...cashForm, date: e.target.value })} /></div>
+                  <div><FieldLabel>Descrição (opcional)</FieldLabel><TextInput type="text" placeholder="Ex.: Troco, saque, pagamento…" value={cashForm.description} onChange={(e) => setCashForm({ ...cashForm, description: e.target.value })} /></div>
                 </div>
-              </div>
-              <div><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" placeholder="0,00" value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })} /></div>
-              <div><FieldLabel>Data</FieldLabel><TextInput type="date" value={cashForm.date} onChange={(e) => setCashForm({ ...cashForm, date: e.target.value })} /></div>
-              <div><FieldLabel>Descrição (opcional)</FieldLabel><TextInput type="text" placeholder="Ex.: Troco, saque, pagamento…" value={cashForm.description} onChange={(e) => setCashForm({ ...cashForm, description: e.target.value })} /></div>
-            </div>
-            {cashError && <p className="text-sm mt-3" style={{ color: C.alert }}>{cashError}</p>}
-            <div className="mt-4"><PrimaryButton onClick={handleAddCashMovement}>{cashForm.type === 'entrada' ? 'Adicionar ao caixa' : 'Registrar retirada'}</PrimaryButton></div>
+                {cashError && <p className="text-sm mt-3" style={{ color: C.alert }}>{cashError}</p>}
+                <div className="mt-4"><PrimaryButton onClick={handleAddCashMovement}>{cashForm.type === 'entrada' ? 'Adicionar ao caixa' : 'Registrar retirada'}</PrimaryButton></div>
+              </>
+            )}
 
             {cashMovements.length > 0 && (
               <div className="mt-6 divide-y" style={{ borderColor: C.border }}>
@@ -1526,6 +1524,79 @@ function FinanceDashboard() {
             )}
           </div>
         )}
+
+        {/* ---------------- DÍVIDAS ---------------- */}
+        {activeTab === 'debts' && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-2 rounded-xl p-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+              <h2 className="text-lg font-serif font-semibold mb-4">{editingDebtId ? 'Editar dívida' : 'Registrar dívida'}</h2>
+              <FieldLabel>Descrição da dívida</FieldLabel>
+              <TextInput type="text" placeholder="Ex.: Empréstimo do banco, conta de água…" value={debtForm.description} onChange={(e) => setDebtForm({ ...debtForm, description: e.target.value })} />
+              <div className="mt-3"><FieldLabel>Tipo</FieldLabel><Select value={debtForm.type} onChange={(e) => setDebtForm({ ...debtForm, type: e.target.value })}>{DEBT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</Select></div>
+              <div className="mt-3"><FieldLabel>Valor (R$)</FieldLabel><TextInput type="number" step="0.01" min="0" placeholder="0,00" value={debtForm.amount} onChange={(e) => setDebtForm({ ...debtForm, amount: e.target.value })} /></div>
+              <div className="mt-3"><FieldLabel>Data de vencimento</FieldLabel><TextInput type="date" value={debtForm.dueDate} onChange={(e) => setDebtForm({ ...debtForm, dueDate: e.target.value })} /></div>
+              <div className="mt-3"><FieldLabel>De quem é a responsabilidade</FieldLabel><Select value={debtForm.responsible} onChange={(e) => setDebtForm({ ...debtForm, responsible: e.target.value })}><option value="Casal">Casal (ambos)</option>{personNames.slice(1).map((p) => <option key={p} value={p}>{p}</option>)}</Select></div>
+              <div className="mt-3"><FieldLabel>Status</FieldLabel>
+                <div className="flex gap-2">
+                  {[{ id: 'pendente', label: 'Pendente' }, { id: 'pago', label: 'Pago' }].map((s) => {
+                    const active = debtForm.status === s.id;
+                    return (
+                      <button key={s.id} onClick={() => setDebtForm({ ...debtForm, status: s.id })}
+                        className="flex-1 rounded-lg px-3 py-2 text-sm"
+                        style={{ background: active ? C.pine : C.panelAlt, color: active ? '#fff' : C.inkMuted, border: `1px solid ${active ? C.pine : C.border}` }}>
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {debtError && <p className="text-sm mt-3" style={{ color: C.alert }}>{debtError}</p>}
+              <div className="mt-5 flex gap-3">
+                <PrimaryButton onClick={handleSaveDebt}>{editingDebtId ? 'Salvar alterações' : 'Registrar dívida'}</PrimaryButton>
+                {editingDebtId && <SecondaryButton onClick={() => { setDebtForm(emptyDebtForm()); setEditingDebtId(null); }}>Cancelar</SecondaryButton>}
+              </div>
+            </div>
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              {debts.length === 0 ? (
+                <div className="rounded-xl p-6 text-center" style={{ background: C.panel, border: `1px solid ${C.border}` }}><p className="text-sm" style={{ color: C.inkMuted }}>Nenhuma dívida registrada. Registre uma para acompanhar as contas pendentes.</p></div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {debts.map((d) => {
+                    const dueDate = new Date(d.dueDate);
+                    const today = new Date();
+                    const daysUntilDue = Math.ceil((dueDate - today) / 86400000);
+                    const isOverdue = daysUntilDue < 0 && d.status === 'pendente';
+                    return (
+                      <div key={d.id} className="rounded-xl p-4" style={{ background: C.panel, border: `1px solid ${isOverdue ? C.alert : C.border}`, borderLeft: `4px solid ${isOverdue ? C.alert : d.status === 'pago' ? C.pine : C.gold}` }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <h3 className="text-sm font-medium flex items-center gap-2" style={{ color: C.ink }}>
+                              {d.description}
+                              {d.status === 'pago' && <span className="text-xs px-2 py-1 rounded-full" style={{ background: C.pineLight, color: C.pine }}>Pago</span>}
+                            </h3>
+                            <p className="text-xs mt-1" style={{ color: C.inkMuted }}>
+                              {DEBT_TYPES.find((t) => t.id === d.type)?.label} · {d.responsible}
+                              {isOverdue && <span style={{ color: C.alert }}> · Vencido há {Math.abs(daysUntilDue)} dias</span>}
+                              {!isOverdue && d.status === 'pendente' && <span style={{ color: C.gold }}> · Vence em {daysUntilDue} dias ({d.dueDate})</span>}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-serif font-semibold tabular-nums" style={{ color: C.alert }}>{formatBRL(d.amount)}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button onClick={() => handleEditDebt(d)} className="text-xs flex items-center gap-1" style={{ color: C.pine }}>✏️ Editar</button>
+                          <button onClick={() => handleDeleteDebt(d.id)} className="text-xs flex items-center gap-1" style={{ color: C.alert }}>🗑️ Remover</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'cards' && viewingCard && (
           <div className="flex flex-col gap-4">
             <button onClick={() => setViewingCardId(null)} className="text-sm flex items-center gap-1.5 w-fit" style={{ color: C.pine }}>
@@ -1557,7 +1628,9 @@ function FinanceDashboard() {
                           <p className="text-xs" style={{ color: C.inkMuted }}>{e.date} · {e.person} · {cat.label}{e.installments > 1 ? ` · parcela ${e.installmentNumber}/${e.installments}` : ''}</p>
                         </div>
                         <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
-                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                        {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="shrink-0"><Icon name="link" size={14} style={{ color: C.pine }} /></a>}
+                        <button onClick={() => handleEditEntry(e)} className="shrink-0" title="Editar"><Icon name="pencil" size={15} style={{ color: C.gold }} /></button>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0" title="Deletar"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
                       </div>
                     );
                   })}
@@ -1688,14 +1761,7 @@ function FinanceDashboard() {
                       <div key={e.id} className="flex items-center gap-3 px-4 py-3">
                         <div className="rounded-full p-2 shrink-0" style={{ background: C.pineLight }}><Icon name={cat.icon} size={14} style={{ color: C.pine }} /></div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
-                            {e.receipt && e.receipt.startsWith('http') && (
-                              <a href={e.receipt} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Abrir comprovante" style={{ color: C.gold }}>
-                                <Icon name="link" size={12} />
-                              </a>
-                            )}
-                          </div>
+                          <p className="text-sm truncate" style={{ color: C.ink }}>{e.description}</p>
                           <p className="text-xs" style={{ color: C.inkMuted }}>
                             {e.date} · {e.person} · {cat.label}{e.petSubcategory && <> ({e.petSubcategory})</>}
                             {card && <> · <span className="inline-flex items-center gap-1" style={{ color: card.color }}><Icon name="creditcard" size={11} />{card.name}{e.installments > 1 ? ` (${e.installmentNumber}/${e.installments})` : ''}</span></>}
@@ -1703,7 +1769,9 @@ function FinanceDashboard() {
                           </p>
                         </div>
                         <span className="text-sm tabular-nums shrink-0" style={{ color: C.ink }}>{formatBRL(e.amount)}</span>
-                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
+                        {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="shrink-0"><Icon name="link" size={14} style={{ color: C.pine }} /></a>}
+                        <button onClick={() => handleEditEntry(e)} className="shrink-0" title="Editar"><Icon name="pencil" size={15} style={{ color: C.gold }} /></button>
+                        <button onClick={() => handleDeleteEntry(e.id)} className="shrink-0" title="Deletar"><Icon name="trash" size={15} style={{ color: C.inkMuted }} /></button>
                       </div>
                     );
                   })}
@@ -1713,54 +1781,6 @@ function FinanceDashboard() {
                 <div className="p-3 text-center"><button onClick={() => setHistoryVisibleCount((n) => n + 25)} className="text-xs" style={{ color: C.pine }}>Carregar mais ({historyEntries.length - historyVisibleCount} restantes)</button></div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* ---------------- ACTIVITY LOG -------- */}
-        {activeTab === 'activity' && (
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-serif font-semibold mr-auto">Log de atividades</h2>
-              <p className="text-xs" style={{ color: C.inkMuted }}>Acompanhe tudo que você e seu parceiro fizeram</p>
-            </div>
-            {activityLog.length === 0 ? (
-              <div className="rounded-xl p-10 text-center" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
-                <Icon name="history" size={32} style={{ color: C.inkMuted, margin: '0 auto 8px' }} />
-                <p className="text-sm" style={{ color: C.inkMuted }}>Nenhuma atividade registrada ainda</p>
-              </div>
-            ) : (
-              <div className="rounded-xl overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
-                <div className="divide-y" style={{ borderColor: C.border }}>
-                  {activityLog.map((log) => {
-                    const logDate = new Date(log.at);
-                    const now = new Date();
-                    let timeStr = '';
-                    const diffMs = now - logDate;
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const diffHours = Math.floor(diffMs / 3600000);
-                    const diffDays = Math.floor(diffMs / 86400000);
-                    if (diffMins < 1) timeStr = 'agora mesmo';
-                    else if (diffMins < 60) timeStr = `${diffMins}m atrás`;
-                    else if (diffHours < 24) timeStr = `${diffHours}h atrás`;
-                    else if (diffDays < 7) timeStr = `${diffDays}d atrás`;
-                    else timeStr = logDate.toLocaleDateString('pt-BR');
-                    return (
-                      <div key={log.id} className="flex items-start gap-3 px-4 py-3 hover:opacity-80 transition-opacity">
-                        <div className="rounded-full p-2.5 shrink-0" style={{ background: C.pineLight }}>
-                          <Icon name="zap" size={14} style={{ color: C.pine }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm" style={{ color: C.ink }}>
-                            <strong>{log.who}</strong> {log.action}
-                          </p>
-                          <p className="text-xs" style={{ color: C.inkMuted }}>{timeStr}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1916,8 +1936,8 @@ service cloud.firestore {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(28,38,32,0.45)' }} onClick={() => setQuickAddOpen(false)}>
           <div onClick={(ev) => ev.stopPropagation()} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: C.panel }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-serif font-semibold">Lançar gasto</h2>
-              <button onClick={() => setQuickAddOpen(false)}><Icon name="x" size={18} style={{ color: C.inkMuted }} /></button>
+              <h2 className="text-lg font-serif font-semibold">{editingEntryId ? 'Editar gasto' : 'Lançar gasto'}</h2>
+              <button onClick={() => { setQuickAddOpen(false); if (editingEntryId) { setEntryForm(emptyEntryForm()); setEditingEntryId(null); } }}><Icon name="x" size={18} style={{ color: C.inkMuted }} /></button>
             </div>
 
             <FieldLabel>Valor (R$)</FieldLabel>
@@ -1962,13 +1982,8 @@ service cloud.firestore {
               <TextInput type="text" placeholder="Ex.: Mercado do mês, cinema…" value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} />
             </div>
 
-            <div className="mt-4"><FieldLabel>Comprovante ou link (opcional)</FieldLabel>
-              <TextInput type="text" placeholder="Ex.: URL da nota fiscal, Print do comprovante…" value={entryForm.receipt} onChange={(e) => setEntryForm({ ...entryForm, receipt: e.target.value })} />
-              {entryForm.receipt && entryForm.receipt.startsWith('http') && (
-                <a href={entryForm.receipt} target="_blank" rel="noopener noreferrer" className="text-xs mt-1 flex items-center gap-1 hover:underline" style={{ color: C.pine }}>
-                  <Icon name="link" size={12} /> Abrir comprovante
-                </a>
-              )}
+            <div className="mt-4"><FieldLabel>Link do comprovante (opcional)</FieldLabel>
+              <TextInput type="url" placeholder="Cole o link da nota fiscal, foto no Drive, etc." value={entryForm.receiptUrl} onChange={(e) => setEntryForm({ ...entryForm, receiptUrl: e.target.value })} />
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
@@ -2017,7 +2032,10 @@ service cloud.firestore {
             {entryForm.recurrence === 'Mensal' && <p className="text-xs mt-2" style={{ color: C.inkMuted }}>Este gasto será criado para o mês escolhido e os 11 meses seguintes.</p>}
 
             {entryError && <p className="text-sm mt-3" style={{ color: C.alert }}>{entryError}</p>}
-            <div className="mt-5"><PrimaryButton onClick={handleAddEntry}>Salvar gasto</PrimaryButton></div>
+            <div className="mt-5 flex gap-3">
+              <PrimaryButton onClick={editingEntryId ? handleSaveEditEntry : handleAddEntry}>{editingEntryId ? 'Salvar alterações' : 'Salvar gasto'}</PrimaryButton>
+              {editingEntryId && <SecondaryButton onClick={() => { setQuickAddOpen(false); setEntryForm(emptyEntryForm()); setEditingEntryId(null); }}>Cancelar</SecondaryButton>}
+            </div>
           </div>
         </div>
       )}
@@ -2030,11 +2048,7 @@ root.render(<FinanceDashboard />);
 </script>
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => { 
-      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
-        console.warn('Service Worker registration failed:', err);
-      }); 
-    });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
   }
 </script>
 </body>
